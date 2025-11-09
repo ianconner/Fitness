@@ -1,6 +1,6 @@
-streamlit>=1.38
+streamlit
 pandas
 plotly
 psycopg2-binary
-google-generativeai
 python-dotenv
+requests
