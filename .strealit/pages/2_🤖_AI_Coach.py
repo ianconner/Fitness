@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -------------------------------------------------
-# DB Connection – Uses POSTGRES_URL
+# DB Connection
 # -------------------------------------------------
 def get_db_connection():
     url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
@@ -20,98 +20,87 @@ def get_db_connection():
 
 def get_logs():
     conn = get_db_connection()
-    df = pd.read_sql_query("SELECT * FROM logs ORDER BY date", conn)
+    df = pd.read_sql_query("SELECT * FROM logs ORDER BY date DESC LIMIT 15", conn)
     conn.close()
     return df
 
 df = get_logs()
 if df.empty:
-    st.warning("Log some workouts first, then come back for the coach!")
+    st.warning("Log a workout first — Coach Riley needs data!")
     st.stop()
 
 df['date'] = pd.to_datetime(df['date'])
-df['run_time'] = df['run_minutes'] + df['run_seconds']/60
-df['pace'] = df['run_time'] / df['distance'].replace(0, pd.NA)
+df['run_time'] = df['run_minutes'] + df['run_seconds'] / 60
+df['pace'] = (df['run_time'] / df['distance'].replace(0, pd.NA)).round(2)
 
-# Filter valid runs
-runs = df[df['distance'] > 0].copy()
-
-# Gemini Setup
-gemini_api_key = st.secrets.get("GEMINI_API_KEY") or st.text_input("Gemini API Key", type="password")
-if not gemini_api_key:
-    st.info("Paste your Google Gemini API key above or add to Streamlit secrets.")
-    st.stop()
-
-genai.configure(api_key=gemini_api_key)
-model = genai.GenerativeModel('gemini-2.5-flash')  # Your upgrade – good call!
-
-# Schedule Logic: Next Off-Day (Thu/Fri/Sat)
+# Next workout day (Thu/Fri/Sat)
 today = datetime.today().date()
-weekday = today.weekday()  # 0=Mon, 3=Thu, 4=Fri, 5=Sat
+weekday = today.weekday()
 days_ahead = (3 - weekday) % 7
 if days_ahead == 0: days_ahead = 7
 next_off = today + timedelta(days=days_ahead)
 
-# Build Prompt
-days_to_test = (datetime(2026, 6, 1).date() - today).days
+# Gemini
+gemini_api_key = st.secrets.get("GEMINI_API_KEY") or st.text_input("Gemini API Key", type="password")
+if not gemini_api_key:
+    st.info("Add your Gemini key in Streamlit Secrets.")
+    st.stop()
 
+genai.configure(api_key=gemini_api_key)
+model = genai.GenerativeModel('gemini-1.5-flash')  # Stable, fast, reliable
+
+# Build SHORT, SAFE prompt
 summary = f"""
-You are **Coach Riley**, a witty, motivational female coach — think upbeat gym buddy with sass, not a drill sergeant.
+You are **Coach Riley**, a sharp, funny, female PT coach. Be warm, direct, sassy.
 
-Goal: USAF PT test June 2026
-- 2-mile run in ≤18:00
-- 45 push-ups in 1 min
-- 45 crunches in 2 min
+Goal: USAF PT Test June 2026
+- 2-mile ≤18:00
+- 45 push-ups
+- 45 crunches
 
-Current date: {today}
-Next workout day: {next_off.strftime('%A, %b %d')} (user trains only Thu/Fri/Sat)
-Days until test: {days_to_test}
+Today: {today}
+Next workout: {next_off.strftime('%A, %b %d')} (Thu/Fri/Sat only)
+Days to test: {(datetime(2026, 6, 1).date() - today).days}
 
---- LAST 10 LOGS ---
+Recent runs (pace in min/mi):
 """
-recent = df.tail(10)
-for _, r in recent.iterrows():
-    run = f"{int(r['run_minutes'])}:{int(r['run_seconds']):02d}" if pd.notna(r['run_minutes']) else "—"
-    summary += f"{r['date'].date()}: Run {run} | Push {r['pushups']} | Crunch {r['crunches']} | Felt {r['felt_rating']}/5\n"
+for _, r in df[df['distance'] > 0].tail(5).iterrows():
+    summary += f"- {r['date'].date()}: {r['distance']} mi in {int(r['run_minutes'])}:{int(r['run_seconds']):02d} → {r['pace']} min/mi | Felt {r['felt_rating']}/5\n"
 
 summary += f"""
---- CUMULATIVE ---
-Total miles run: {df['run_minutes'].count() * 2}
-Total push-ups: {df['pushups'].sum()}
-Total crunches: {df['crunches'].sum()}
-"""
+Strength: Push-ups {df['pushups'].iloc[-1]}, Crunches {df['crunches'].iloc[-1]}
 
-summary += """
 Give:
-1. Quick vibe check (progress, wins, funny nudge).
-2. **Next workout** for the *next available off-day* (list date). Include warm-up, main sets, cooldown.
-3. Keep it under 50 min, bodyweight only, scalable.
-4. End with a short pep-talk.
-
-Tone: Female, humorous, encouraging, a little sassy.
+1. Vibe check (funny + real)
+2. Next workout (<50 min, bodyweight)
+3. 2-mile prediction
+4. Pep talk
 """
 
-# -------------------------------------------------
-# Generate Plan – WITH SAFETY FIX
-# -------------------------------------------------
-if st.button("Get My Next Workout Plan"):
-    with st.spinner("Coach Riley is crunching the numbers…"):
-        response = model.generate_content(
-            summary,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.8,
-                max_output_tokens=600
-            ),
-            safety_settings=[
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            ]
-        )
-        if not response.parts:
-            st.warning("Response blocked by safety filters—retrying with adjustments.")
-        else:
-            plan = response.text
-            st.markdown("### Coach Riley’s Plan")
-            st.write(plan)
+# Generate with safety OFF + robust response handling
+if st.button("Get Plan from Coach Riley"):
+    with st.spinner("Coach Riley is cooking..."):
+        try:
+            response = model.generate_content(
+                summary,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.8,
+                    max_output_tokens=500
+                ),
+                safety_settings=[
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                ]
+            )
+
+            # SAFE TEXT EXTRACTION
+            if response.candidates and response.candidates[0].content.parts:
+                plan = response.candidates[0].content.parts[0].text
+                st.markdown("### Coach Riley’s Plan")
+                st.write(plan)
+            else:
+                st.warning("Response blocked. Try again or simplify data.")
+        except Exception as e:
+            st.error(f"AI error: {e}")
