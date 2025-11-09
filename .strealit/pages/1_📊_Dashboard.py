@@ -36,58 +36,95 @@ valid_df = df[df['distance'] > 0].copy()
 valid_df['cum_miles'] = valid_df['distance'].cumsum()
 
 # Avg Pace Over Last 5 Runs (or all if <5)
-last_n = valid_df.head(5)  # Last 5 (most recent)
+last_n = valid_df.head(5)
 avg_pace = last_n['pace_min_per_mi'].mean() if not last_n.empty else pd.NA
 
-# Projected 2-Mile
+# Projected 2-Mile Time
 projected_2mi_min = avg_pace * 2 if pd.notna(avg_pace) else pd.NA
 projected_str = f"{int(projected_2mi_min):02d}:{int((projected_2mi_min % 1)*60):02d}" if pd.notna(projected_2mi_min) else "N/A"
 
-GOAL_RUN_MIN = 18.0
+# GOALS
+GOAL_RUN_MIN = 18.0  # 18:00
 GOAL_PUSH = 45
 GOAL_CRUNCH = 45
 
 st.title("Progress Dashboard")
 
-# Metrics
+# === METRICS ===
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.metric("Projected 2-Mile Time", projected_str, f"Based on avg pace ({avg_pace:.2f} min/mi over last {len(last_n)} runs)")
-    prog = min(projected_2mi_min / GOAL_RUN_MIN, 1.0) if pd.notna(projected_2mi_min) else 0
-    st.progress(prog)
+    # 2-Mile Projected Time (Lower = Better)
+    if pd.notna(projected_2mi_min):
+        # Progress: 1.0 = at or under goal, 0 = far above
+        progress_val = max(0, min(1, (20 - projected_2mi_min) / (20 - GOAL_RUN_MIN)))  # 20 min cap for scale
+        st.metric(
+            "Projected 2-Mile Time",
+            projected_str,
+            f"Last {len(last_n)} runs: {avg_pace:.2f} min/mi"
+        )
+        # Color logic: red >18, yellow 18-20, green ≤18
+        if projected_2mi_min <= GOAL_RUN_MIN:
+            color = "normal"  # Green
+        elif projected_2mi_min <= 20:
+            color = "off"     # Yellow (warning)
+        else:
+            color = "inverse" # Red
+        st.progress(progress_val, text=None)  # Streamlit auto-colors based on value
+        # Force red bar if over goal
+        if color == "inverse":
+            st.markdown(f"<div style='background-color:red;height:8px;border-radius:4px;'></div>", unsafe_allow_html=True)
+        elif color == "off":
+            st.markdown(f"<div style='background-color:orange;height:8px;border-radius:4px;'></div>", unsafe_allow_html=True)
+    else:
+        st.metric("Projected 2-Mile Time", "N/A")
+        st.progress(0)
+
 with col2:
     latest_p = df['pushups'].iloc[-1]
     prog_p = min(latest_p / GOAL_PUSH, 1.0)
-    st.metric("Push-ups", latest_p, f"{GOAL_PUSH-latest_p} to goal")
+    st.metric("Push-ups", latest_p, f"{GOAL_PUSH - latest_p} to goal")
     st.progress(prog_p)
+
 with col3:
     latest_c = df['crunches'].iloc[-1]
     prog_c = min(latest_c / GOAL_CRUNCH, 1.0)
-    st.metric("Crunches", latest_c, f"{GOAL_CRUNCH-latest_c} to goal")
+    st.metric("Crunches", latest_c, f"{GOAL_CRUNCH - latest_c} to goal")
     st.progress(prog_c)
 
-# Trend Summary (Full History)
+# === TREND SUMMARY (FULL HISTORY) ===
 st.markdown("---")
 st.subheader("Trend Summary (Full History)")
 colA, colB, colC = st.columns(3)
 with colA:
     st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
 with colB:
-    st.metric("Avg Pace (All Runs)", f"{valid_df['pace_min_per_mi'].mean():.2f} min/mi")
+    overall_avg = valid_df['pace_min_per_mi'].mean()
+    st.metric("Avg Pace (All)", f"{overall_avg:.2f} min/mi")
 with colC:
-    pace_delta = valid_df['pace_min_per_mi'].iloc[0] - valid_df['pace_min_per_mi'].iloc[-1]  # First to last
-    st.metric("Pace Improvement", f"{pace_delta:.2f} min/mi")
+    if len(valid_df) > 1:
+        pace_delta = valid_df['pace_min_per_mi'].iloc[0] - valid_df['pace_min_per_mi'].iloc[-1]
+        st.metric("Pace Improvement", f"{pace_delta:+.2f} min/mi")
+    else:
+        st.metric("Pace Improvement", "N/A")
 
-# Charts (Full History Trends)
+# === CHARTS (FULL HISTORY TRENDS) ===
 st.markdown("---")
 st.subheader("Trend Charts")
 
 tab1, tab2, tab3 = st.tabs(["Pace Trend", "Push-ups", "Crunches"])
 
 with tab1:
-    valid_df['rolling_avg_pace'] = valid_df['pace_min_per_mi'].rolling(window=5).mean()  # 5-run rolling avg
-    fig = px.line(valid_df, x='date', y=['pace_min_per_mi', 'rolling_avg_pace'], title="Pace Trend (min/mi)")
-    fig.add_hline(y=9.0, line_dash="dash", line_color="red", annotation_text="Goal 9:00/mi")
+    valid_df['rolling_avg_pace'] = valid_df['pace_min_per_mi'].rolling(window=5, min_periods=1).mean()
+    fig = px.line(
+        valid_df,
+        x='date',
+        y=['pace_min_per_mi', 'rolling_avg_pace'],
+        title="Pace Trend (min/mi)",
+        labels={"value": "Pace", "variable": "Type"}
+    )
+    fig.add_hline(y=9.0, line_dash="dash", line_color="red", annotation_text="Goal: 9:00/mi")
+    fig.add_hline(y=avg_pace, line_dash="dot", line_color="blue", annotation_text="Current Avg")
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
