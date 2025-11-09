@@ -11,7 +11,7 @@ load_dotenv()
 def get_db_connection():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INIT DB (Tables) ———
+# ——— INIT DB ———
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -53,6 +53,8 @@ if not st.session_state.logged_in:
         login_user = st.text_input("Username", key="login_user")
         login_pass = st.text_input("Password", type="password", key="login_pass")
         if st.button("Login"):
+            conn = None
+            cur = None
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
@@ -69,14 +71,16 @@ if not st.session_state.logged_in:
             except Exception as e:
                 st.error(f"Error: {e}")
             finally:
-                if 'cur' in locals(): cur.close()
-                if 'conn' in locals(): conn.close()
+                if cur: cur.close()
+                if conn: conn.close()
 
     with col2:
         st.markdown("### Signup")
         new_user = st.text_input("New Username", key="new_user")
         new_pass = st.text_input("New Password", type="password", key="new_pass")
         if st.button("Create Account"):
+            conn = None
+            cur = None
             try:
                 conn = get_db_connection()
                 cur = conn.cursor()
@@ -88,11 +92,11 @@ if not st.session_state.logged_in:
             except Exception as e:
                 st.error(f"Error: {e}")
             finally:
-                if 'cur' in locals(): cur.close()
-                if 'conn' in locals(): conn.close()
+                if cur: cur.close()
+                if conn: conn.close()
     st.stop()
 
-# ——— LOGGED IN: NAV + LOG FORM ———
+# ——— LOGGED IN ———
 st.sidebar.success(f"Logged in: {st.session_state.username}")
 if st.sidebar.button("Logout"):
     for key in list(st.session_state.keys()):
@@ -120,6 +124,8 @@ with st.form("log_form"):
     felt = st.slider("Felt Rating (1=Bad, 5=Great)", 1, 5, 3)
 
     if st.form_submit_button("Log Session"):
+        conn = None
+        cur = None
         try:
             conn = get_db_connection()
             cur = conn.cursor()
@@ -133,5 +139,5 @@ with st.form("log_form"):
         except Exception as e:
             st.error(f"Error: {e}")
         finally:
-            if 'cur' in locals(): cur.close()
-            if 'conn' in locals(): conn.close()
+            if cur: cur.close()
+            if conn: conn.close()
