@@ -28,8 +28,9 @@ if df.empty:
     st.stop()
 
 df['date'] = pd.to_datetime(df['date'])
-df['run_time'] = df['run_minutes'] + df['run_seconds']/60
-df['pace'] = df['run_time'] / df['distance'].replace(0, pd.NA)
+df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
+df['pace_min_per_mi'] = df['run_time_min'] / df['distance']
+df = df[df['distance'] > 0].copy()
 
 # ——— Next Training Day ———
 today = datetime.today().date()
@@ -47,46 +48,63 @@ if not GROQ_API_KEY:
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.1-8b-instant"
 
-# ——— Build Prompt (No Fluff, No "Girl") ———
-days_to_test = (datetime(2026, 6, 1).date() - today).days
-runs = df[df['distance'] > 0].tail(10)
+# ——— Analytics ———
+n_sessions = len(df)
+total_mi = df['distance'].sum()
+avg_pace = df['pace_min_per_mi'].mean()
+best_pace = df['pace_min_per_mi'].min()
+pushup_max = df['pushups'].max()
+crunch_max = df['crunches'].max()
+felt_avg = df['felt_rating'].mean()
 
-prompt = f"""You are **Coach Riley**, ex-USAF PT instructor. Female. Direct. No drama. No fluff.
+# Trend: Last 3 vs First 3
+recent = df.head(3)
+early = df.tail(3) if len(df) > 5 else df.head(3)
+pace_trend = recent['pace_min_per_mi'].mean() - early['pace_min_per_mi'].mean()
 
-Mission: Get this 39-year-old man to crush the June 2026 PT test:
-- 2-mile run ≤18:00
-- 45 push-ups in 1 min
-- 45 crunches in 2 min
+# 2-Mile Projection
+projected_2mi_min = avg_pace * 2
+projected_2mi_time = f"{int(projected_2mi_min):02d}:{int((projected_2mi_min % 1)*60):02d}"
+
+# ——— Prompt: Scientist + Coach ———
+prompt = f"""You are **Coach Riley** — ex-USAF biomechanics specialist turned performance coach. Female. Data-first. No fluff.
+
+Athlete: 39-year-old male. Goal: June 2026 PT Test
+- 2-mile ≤ 18:00
+- 45 push-ups in 60s
+- 45 crunches in 120s
 
 Today: {today}
-Next training day: {next_off.strftime('%A, %b %d')} (Thu/Fri/Sat only)
-Days to test: {days_to_test}
+Next session: {next_off.strftime('%A, %b %d')} (Thu/Fri/Sat only)
 
---- LAST 10 RUNS ---
+--- DATA SNAPSHOT ---
+Sessions: {n_sessions}
+Total miles: {total_mi:.1f}
+Avg pace: {avg_pace:.2f} min/mi
+Best pace: {best_pace:.2f} min/mi
+Pace trend (recent vs early): {'+' if pace_trend > 0 else ''}{pace_trend:.2f} min/mi
+Push-up max: {pushup_max}
+Crunch max: {crunch_max}
+Avg felt: {felt_avg:.1f}/5
+
+--- LAST 5 SESSIONS ---
 """
-for _, r in runs.iterrows():
-    pace = f"{r['pace']:.2f}" if pd.notna(r['pace']) else "—"
-    prompt += f"{r['date'].date()}: {r['distance']} mi | {int(r['run_minutes'])}:{int(r['run_seconds']):02d} | {pace} min/mi | Felt {r['felt_rating']}/5 | Push-ups {r['pushups']} | Crunches {r['crunches']}\n"
+for _, r in df.head(5).iterrows():
+    prompt += f"{r['date'].date()}: {r['distance']} mi | {int(r['run_minutes'])}:{int(r['run_seconds']):02d} | {r['pace_min_per_mi']:.2f} min/mi | Felt {r['felt_rating']} | Push-ups {r['pushups']} | Crunches {r['crunches']}\n"
 
 prompt += f"""
---- STATS ---
-Total miles: {df['distance'].sum():.1f}
-Avg pace: {df['pace'].mean():.1f} min/mi
-Total push-ups: {df['pushups'].sum()}
-Total crunches: {df['crunches'].sum()}
+--- ANALYSIS & PRESCRIPTION ---
+1. **Trend Report**: What the numbers say (be blunt).
+2. **Next Session**: <50 min, bodyweight. Include volume, intensity, rest.
+3. **2-Mile Forecast**: Current projection = {projected_2mi_time}. What it takes to hit 18:00.
+4. **Action Items**: 1-2 specific fixes (e.g., cadence, form, volume).
 
-Give:
-1. Quick read (no sugar, just truth)
-2. Next session (<50 min, bodyweight only)
-3. 2-mile prediction
-4. One-line fire
-
-Tone: Straight talk. Military sharp. Dry humor. Zero "girl" or "queen" energy.
+Tone: Clinical + coach. Use metrics. No emojis. No "girl." No fluff.
 """
 
 # ——— Generate ———
-if st.button("Get Plan from Coach Riley"):
-    with st.spinner("Riley’s reviewing your log..."):
+if st.button("Get Riley's Analysis"):
+    with st.spinner("Riley is running the numbers..."):
         try:
             headers = {
                 "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -95,13 +113,13 @@ if st.button("Get Plan from Coach Riley"):
             data = {
                 "model": MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.7,
-                "max_tokens": 500
+                "temperature": 0.6,
+                "max_tokens": 600
             }
             response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
             response.raise_for_status()
-            plan = response.json()['choices'][0]['message']['content']
-            st.markdown("### Riley’s Orders")
-            st.write(plan)
+            analysis = response.json()['choices'][0]['message']['content']
+            st.markdown("### Riley’s Performance Report")
+            st.write(analysis)
         except Exception as e:
-            st.error(f"Comms down: {e}")
+            st.error(f"Signal lost: {e}")
