@@ -1,9 +1,44 @@
-# pages/2_AI_Coach.py
+# pages/02_AI_Coach.py
 import streamlit as st
 import pandas as pd
 import psycopg2
 import requests
 from datetime import datetime, timedelta
+
+# ——— PAGE CONFIG ———
+st.set_page_config(
+    page_title="SOPHIA Coach",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ——— HIDE STREAMLIT'S AUTO NAV ———
+st.markdown("""
+<style>
+    /* Hide Streamlit's default page navigation menu */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    
+    /* Reduce top padding */
+    .block-container {padding-top: 2rem !important;}
+</style>
+""", unsafe_allow_html=True)
+
+# ——— CHECK LOGIN ———
+if 'logged_in' not in st.session_state or not st.session_state.logged_in:
+    st.error("Please log in from the home page.")
+    st.stop()
+
+# ——— SIDEBAR NAVIGATION ———
+st.sidebar.success(f"**{st.session_state.username}**")
+
+st.sidebar.page_link("app.py", label="🏠 Home")
+st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
+st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
+
+if st.sidebar.button("Logout", use_container_width=True):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # ---------- DB ----------
 def get_db_connection():
@@ -68,7 +103,7 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.1-8b-instant"
 
 # ---------- SOPHIA PROMPT ----------
-prompt = f"""You are **SOPHIA** — **S**mart **O**ptimized **P**erformance **H**ealth **I**ntelligence **A**ssistant.
+prompt = f"""You are **SOPHIA** – **S**mart **O**ptimized **P**erformance **H**ealth **I**ntelligence **A**ssistant.
 
 User: {st.session_state.username}, 39 y/o male.
 Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days left)
@@ -114,7 +149,7 @@ if st.button("Get Today's SOPHIA Session"):
             r.raise_for_status()
             plan = r.json()['choices'][0]['message']['content']
 
-            st.markdown("### SOPHIA — Smart Optimized Performance Health Intelligence Assistant")
+            st.markdown("### SOPHIA – Smart Optimized Performance Health Intelligence Assistant")
             st.write(plan)
         except Exception as e:
             st.error(f"Error: {e}")
