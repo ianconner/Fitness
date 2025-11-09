@@ -47,7 +47,7 @@ if not gemini_api_key:
     st.stop()
 
 genai.configure(api_key=gemini_api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-001')
 
 # Build FULL history prompt
 days_to_test = (datetime(2026, 6, 1).date() - today).days
