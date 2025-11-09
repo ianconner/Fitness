@@ -1,6 +1,8 @@
+# pages/1_📊_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import psycopg2  # <-- ADDED
 from datetime import datetime
 
 # ——— DB ———
@@ -25,7 +27,6 @@ df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
-valid_df['cum_miles'] = valid_df['distance'].cumsum()
 
 # ——— GOAL SETTINGS ———
 st.sidebar.markdown("## Goal Settings")
@@ -55,8 +56,7 @@ st.title("Progress Dashboard")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    progress_val = max(0, min(1, (20 - projected_2mi_min) / (20 - GOAL_RUN_MIN))) if pd.notna(projected_2mi_min) else 0
-    st.metric("Projected 2-Mile", projected_str, f"Last {len(last_5)}: {avg_pace:.2f} min/mi")
+    st.metric("Projected 2-Mile", projected_str, f"Last 5: {avg_pace:.2f} min/mi")
     if projected_2mi_min <= GOAL_RUN_MIN:
         st.markdown("<div style='background-color:#4CAF50;height:8px;'></div>", unsafe_allow_html=True)
     elif projected_2mi_min <= 20:
@@ -72,30 +72,18 @@ with col3:
     latest_c = df['crunches'].iloc[-1]
     st.metric("Crunches", latest_c, f"{GOAL_CRUNCH - latest_c} to goal")
 
-# Trends
+# ——— TRENDS ———
 st.markdown("---")
 st.subheader("Trends")
 colA, colB = st.columns(2)
 with colA:
-    st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
+    st.metric("Total Miles", f"{valid_df['distance'].sum():.1f}")
 with colB:
     days_to_goal = (GOAL_DATE - datetime.today().date()).days
     st.metric("Days to Goal", f"{days_to_goal}")
 
-# Charts
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
-
 with tab1:
     fig = px.line(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend")
     fig.add_hline(y=GOAL_RUN_MIN/2, line_dash="dash", line_color="red")
-    st.plotly_chart(fig, use_container_width=True)
-
-with tab2:
-    fig = px.bar(df, x='date', y='pushups', title="Push-ups")
-    fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red")
-    st.plotly_chart(fig, use_container_width=True)
-
-with tab3:
-    fig = px.bar(df, x='date', y='crunches', title="Crunches")
-    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red")
     st.plotly_chart(fig, use_container_width=True)
