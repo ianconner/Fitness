@@ -3,12 +3,25 @@ import streamlit as st
 import psycopg2
 from datetime import datetime
 
-# ——— PAGE CONFIG (MUST BE FIRST) ———
+# ——— DISABLE AUTO PAGE LINKS & CLEAN LAYOUT ———
 st.set_page_config(
     page_title="SOPHIA",
     layout="centered",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items=None  # Removes hamburger menu
 )
+
+# Hide Streamlit's default page navigation (the top "app | dashboard | AI Coach")
+hide_page_nav = """
+<style>
+    /* Hide auto-generated page links at top */
+    .css-1d391kg, .css-1v0mbdj, .css-1v3fvcr {display: none !important;}
+    /* Optional: tighter spacing */
+    .block-container {padding-top: 1rem;}
+    .css-1y0t9j1 {padding: 1rem;}
+</style>
+"""
+st.markdown(hide_page_nav, unsafe_allow_html=True)
 
 # ——— DATABASE CONNECTION ———
 def get_db_connection():
@@ -47,13 +60,12 @@ init_db()
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# ——— LOGIN / SIGNUP (COMPACT, 2 LINES) ———
+# ——— LOGIN / SIGNUP (2 LINES, NO REDUNDANCY) ———
 if not st.session_state.logged_in:
-    # Compact, 2-line title
     st.markdown(
-        "<h2 style='text-align: center; line-height: 1.3;'>"
+        "<h2 style='text-align: center; line-height: 1.2; margin-bottom: 1rem;'>"
         "WELCOME TO SOPHIA<br>"
-        "<small>Smart Optimized Performance Health Intelligence Assistant — Login or Signup</small>"
+        "<small style='font-weight: normal; color: #666;'>Smart Optimized Performance Health Intelligence Assistant</small>"
         "</h2>",
         unsafe_allow_html=True
     )
@@ -121,7 +133,7 @@ if st.sidebar.button("Logout", use_container_width=True):
         del st.session_state[key]
     st.rerun()
 
-# ——— HOME: LOG SESSION (COMPACT) ———
+# ——— HOME: LOG SESSION ———
 st.markdown(f"### Log Session — {st.session_state.username}")
 
 with st.form("log_form"):
