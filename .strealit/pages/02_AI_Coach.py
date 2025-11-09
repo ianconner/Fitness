@@ -19,7 +19,7 @@ st.markdown("""
     [data-testid="stSidebarNav"] {display: none !important;}
     
     /* Reduce top padding */
-    .block-container {padding-top: 2rem !important;}
+    .block-container {padding-top: 4rem !important;}
 </style>
 """, unsafe_allow_html=True)
 
