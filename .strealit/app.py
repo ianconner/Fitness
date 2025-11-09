@@ -11,12 +11,13 @@ st.set_page_config(
     menu_items=None
 )
 
-# ——— HIDE STREAMLIT'S AUTO NAV (app | dashboard | AI Coach) ———
+# ——— HIDE STREAMLIT'S AUTO NAV - FIXED VERSION ———
 st.markdown("""
 <style>
-    .css-1d391kg, .css-1v0mbdj, .css-1v3fvcr,
-    .css-1y0t9j1, .css-1v3fvcr a,
-    section[data-testid="stSidebar"] > div:first-child {display: none !important;}
+    /* Hide Streamlit's default page navigation menu */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    
+    /* Reduce top padding */
     .block-container {padding-top: 2rem !important;}
 </style>
 """, unsafe_allow_html=True)
@@ -100,10 +101,10 @@ if not st.session_state.logged_in:
 # ——— SIDEBAR: CLEAN NAV ONLY ———
 st.sidebar.success(f"**{st.session_state.username}**")
 
-# USE CORRECT FILENAMES
-st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/01_Dashboard.py", label="Dashboard")     # ← FIXED
-st.sidebar.page_link("pages/02_AI_Coach.py", label="SOPHIA Coach")  # ← FIXED
+# Navigation links with correct filenames
+st.sidebar.page_link("app.py", label="🏠 Home")
+st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
+st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
 
 if st.sidebar.button("Logout", use_container_width=True):
     for key in list(st.session_state.keys()):
