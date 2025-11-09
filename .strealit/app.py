@@ -11,7 +11,7 @@ st.set_page_config(
     menu_items=None
 )
 
-# ——— HIDE STREAMLIT'S AUTO NAV - FIXED VERSION ———
+# ——— HIDE STREAMLIT'S AUTO NAV ———
 st.markdown("""
 <style>
     /* Hide Streamlit's default page navigation menu */
@@ -47,6 +47,19 @@ init_db()
 # ——— SESSION ———
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+
+# ——— SIDEBAR: ONLY SHOW WHEN LOGGED IN ———
+if st.session_state.get('logged_in', False):
+    st.sidebar.success(f"**{st.session_state.username}**")
+    
+    st.sidebar.page_link("app.py", label="🏠 Home")
+    st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
+    st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
+    
+    if st.sidebar.button("Logout", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 # ——— LOGIN / SIGNUP ———
 if not st.session_state.logged_in:
@@ -97,20 +110,6 @@ if not st.session_state.logged_in:
             conn.close()
 
     st.stop()
-
-# ——— SIDEBAR: CLEAN NAV ONLY (ONLY WHEN LOGGED IN) ———
-if st.session_state.get('logged_in', False):
-    st.sidebar.success(f"**{st.session_state.username}**")
-
-    # Navigation links with correct filenames
-    st.sidebar.page_link("app.py", label="🏠 Home")
-    st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
-    st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
-
-    if st.sidebar.button("Logout", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
 
 # ——— HOME: LOG SESSION ———
 st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
