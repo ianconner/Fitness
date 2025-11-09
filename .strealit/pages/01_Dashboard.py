@@ -1,4 +1,34 @@
-# pages/01_Dashboard.py
+with tab3:
+    # Create crunches chart
+    fig = px.scatter(df, x='date', y='crunches', title="Crunches")
+    
+    # Add green line connecting the dots
+    fig.add_scatter(x=df['date'], y=df['crunches'], 
+                    mode='lines', line=dict(color='green', width=2),
+                    name='Your Crunches', showlegend=True)
+    
+    # Add yellow average line
+    avg_crunches = df['crunches'].mean()
+    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
+                  line_width=2, name='Average')
+    
+    # Add red dashed goal line
+    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
+                  line_width=2, name='Goal')
+    
+    fig.update_xaxes(tickformat="%b %d")
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            title=dict(text="Legend")
+        )
+    )
+    st.plotly_chart(fig, use_container_width=True)# pages/01_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -163,28 +193,39 @@ with tab1:
     
     # Add yellow average line
     avg_pace_all = valid_df['pace_min_per_mi'].mean()
-    fig.add_hline(y=avg_pace_all, line_dash="solid", line_color="yellow", 
-                  line_width=2, annotation_text=f"Avg: {format_pace(avg_pace_all)}", 
-                  annotation_position="right")
+    fig.add_hline(y=avg_pace_all, line_dash="solid", line_color="gold", 
+                  line_width=2, name='Average')
     
     # Add red dashed goal line
     goal_pace_per_mile = GOAL_RUN_MIN / 2
     fig.add_hline(y=goal_pace_per_mile, line_dash="dash", line_color="red", 
-                  line_width=2, annotation_text=f"Goal: {format_pace(goal_pace_per_mile)}", 
-                  annotation_position="right")
+                  line_width=2, name='Goal')
+    
+    # Create custom tick values and labels in MM:SS format
+    y_min = valid_df['pace_min_per_mi'].min()
+    y_max = valid_df['pace_min_per_mi'].max()
+    y_range_min = int(y_min) - 1
+    y_range_max = int(y_max) + 2
+    
+    tick_vals = []
+    tick_labels = []
+    for i in range(y_range_min * 2, y_range_max * 2 + 1):
+        val = i / 2.0
+        tick_vals.append(val)
+        tick_labels.append(format_pace(val))
     
     # Format y-axis to show MM:SS
     fig.update_yaxes(
-        tickmode='linear',
-        tick0=0,
-        dtick=0.5,
-        tickformat=".2f",
+        tickmode='array',
+        tickvals=tick_vals,
+        ticktext=tick_labels,
         title="Pace (min:sec per mile)"
     )
     
     # Custom hover to show MM:SS format
     fig.update_traces(
-        hovertemplate='<b>Date:</b> %{x|%b %d}<br><b>Pace:</b> %{y:.2f} min/mi<extra></extra>',
+        hovertemplate='<b>Date:</b> %{x|%b %d}<br><b>Pace:</b> ' + 
+                      valid_df['pace_display'] + '<extra></extra>',
         selector=dict(mode='markers')
     )
     
@@ -213,14 +254,12 @@ with tab2:
     
     # Add yellow average line
     avg_pushups = df['pushups'].mean()
-    fig.add_hline(y=avg_pushups, line_dash="solid", line_color="yellow", 
-                  line_width=2, annotation_text=f"Avg: {avg_pushups:.0f}", 
-                  annotation_position="right")
+    fig.add_hline(y=avg_pushups, line_dash="solid", line_color="gold", 
+                  line_width=2, name='Average')
     
     # Add red dashed goal line
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", 
-                  line_width=2, annotation_text=f"Goal: {GOAL_PUSH}", 
-                  annotation_position="right")
+                  line_width=2, name='Goal')
     
     fig.update_xaxes(tickformat="%b %d")
     fig.update_layout(
