@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import psycopg2
 from dotenv import load_dotenv
@@ -11,7 +10,7 @@ load_dotenv()
 def get_db_connection():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INIT DB ———
+# ——— INIT DB (With ALTER for user_id) ———
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -32,6 +31,7 @@ def init_db():
             crunches INT,
             felt_rating INT
         );
+        ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_id INTEGER;
     """)
     conn.commit()
     cur.close()
@@ -96,7 +96,7 @@ if not st.session_state.logged_in:
                 if conn: conn.close()
     st.stop()
 
-# ——— LOGGED IN ———
+# ——— LOGGED IN: NAV + LOG FORM ———
 st.sidebar.success(f"Logged in: {st.session_state.username}")
 if st.sidebar.button("Logout"):
     for key in list(st.session_state.keys()):
