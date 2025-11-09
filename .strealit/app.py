@@ -1,88 +1,96 @@
+# app.py
 import streamlit as st
-import pandas as pd
 import psycopg2
+from dotenv import load_dotenv
 import os
 from datetime import datetime
-from dotenv import load_dotenv
 
 load_dotenv()
 
-# -------------------------------------------------
-# DB Connection – POSTGRES_URL ONLY
-# -------------------------------------------------
-def get_db_connection():
-    url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
-    if not url:
-        st.error("Missing POSTGRES_URL in Streamlit secrets!")
-        st.stop()
-    return psycopg2.connect(url)
-
+# ——— DATABASE INIT ———
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('''
+    conn = psycopg2.connect(st.secrets["POSTGRES_URL"])
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS logs (
             id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
             date DATE NOT NULL,
-            distance REAL DEFAULT 2.0,
-            run_minutes REAL,
-            run_seconds REAL,
-            pushups INTEGER DEFAULT 0,
-            crunches INTEGER DEFAULT 0,
-            felt_rating INTEGER DEFAULT 3 CHECK (felt_rating BETWEEN 1 AND 5)
-        )
-    ''')
-    # Safe upgrades
-    for col in [
-        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS distance REAL DEFAULT 2.0;",
-        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_minutes REAL;",
-        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_seconds REAL;",
-        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS felt_rating INTEGER DEFAULT 3;"
-    ]:
-        try: c.execute(col)
-        except: pass
+            distance FLOAT,
+            run_minutes INT,
+            run_seconds INT,
+            pushups INT,
+            crunches INT,
+            felt_rating INT
+        );
+    """)
     conn.commit()
+    cur.close()
     conn.close()
-
-def add_log(date, distance, run_min, run_sec, pushups, crunches, felt):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO logs (date, distance, run_minutes, run_seconds, pushups, crunches, felt_rating)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-    ''', (date, distance, run_min, run_sec, pushups, crunches, felt))
-    conn.commit()
-    conn.close()
-
-def get_logs():
-    conn = get_db_connection()
-    df = pd.read_sql_query("SELECT * FROM logs ORDER BY date", conn)
-    conn.close()
-    return df
-
-# -------------------------------------------------
-# UI
-# -------------------------------------------------
-st.set_page_config(page_title="USAF PT Tracker", layout="wide")
-st.title("USAF PT Tracker – Log Your Run")
 
 init_db()
 
-with st.form("log_form"):
-    st.subheader("Log Today’s Session")
-    col1, col2, col3 = st.columns(3)
+# ——— LOGIN SYSTEM ———
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.title("SOPHIA — Login")
+    col1, col2 = st.columns(2)
+    
     with col1:
-        date = st.date_input("Date", value=datetime.today())
-        distance = st.number_input("Run Distance (miles)", min_value=0.0, value=2.0, step=0.1)
+        st.markdown("### Login")
+        username = st.text_input("Username", key="login_user")
+        password = st.text_input("Password", type="password", key="login_pass")
+        if st.button("Login"):
+            conn = psycopg2.connect(st.secrets["POSTGRES_URL"])
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM users WHERE username = %s AND password = %s", (username, password))
+            user = cur.fetchone()
+            cur.close()
+            conn.close()
+            if user:
+                st.session_state.logged_in = True
+                st.session_state.user_id = user[0]
+                st.session_state.username = username
+                st.rerun()
+            else:
+                st.error("Invalid username or password")
+    
     with col2:
-        run_min = st.number_input("Run Time – minutes", min_value=0, value=0, step=1)
-        run_sec = st.number_input("Run Time – seconds", min_value=0, max_value=59, value=0, step=1)
-    with col3:
-        pushups = st.number_input("Push-ups", min_value=0, value=0, step=1)
-        crunches = st.number_input("Crunches", min_value=0, value=0, step=1)
-    felt = st.slider("How did you feel? (1 = wrecked, 5 = flying)", 1, 5, 3)
-    submitted = st.form_submit_button("Log It")
-    if submitted:
-        add_log(str(date), distance, run_min, run_sec, pushups, crunches, felt)
-        st.success("Logged! Coach Riley is analyzing your pace.")
-        st.balloons()
+        st.markdown("### New User?")
+        new_user = st.text_input("Choose Username", key="new_user")
+        new_pass = st.text_input("Choose Password", type="password", key="new_pass")
+        if st.button("Create Account"):
+            try:
+                conn = psycopg2.connect(st.secrets["POSTGRES_URL"])
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (new_user, new_pass))
+                conn.commit()
+                st.success("Account created! Now login.")
+            except psycopg2.IntegrityError:
+                st.error("Username already taken.")
+            finally:
+                cur.close()
+                conn.close()
+    st.stop()
+
+# ——— LOGGED IN: SHOW NAV ———
+st.sidebar.success(f"Logged in: {st.session_state.username}")
+if st.sidebar.button("Logout"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
+# ——— NAVIGATION ———
+st.sidebar.page_link("app.py", label="Home")
+st.sidebar.page_link("pages/1_📊_Dashboard.py", label="Dashboard")
+st.sidebar.page_link("pages/2_🤖_AI_Coach.py", label="SOPHIA Coach")
+
+st.title(f"Welcome, {st.session_state.username}")
+st.write("Use the sidebar to navigate.")
