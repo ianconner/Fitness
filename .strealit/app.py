@@ -45,7 +45,7 @@ if 'logged_in' not in st.session_state:
 
 # ——— LOGIN / SIGNUP ———
 if not st.session_state.logged_in:
-    st.title("SOPHIA — Login or Signup")
+    st.title("WELCOME TO SOPHIA (Smart Optimized Performance Health Intelligence Assistant) — Login or Signup")
     col1, col2 = st.columns(2)
 
     with col1:
