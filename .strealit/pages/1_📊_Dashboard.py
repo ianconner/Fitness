@@ -8,9 +8,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# -------------------------------------------------
-# DB Connection – Uses POSTGRES_URL
-# -------------------------------------------------
 def get_db_connection():
     url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
     if not url:
@@ -26,17 +23,16 @@ def get_logs():
 
 df = get_logs()
 if df.empty:
-    st.warning("No logs yet – go add one on the home page!")
+    st.warning("No logs yet – go crush a run!")
     st.stop()
 
 df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
-df['run_pace_min_per_mile'] = df['run_time_min'] / 2
+df['pace_min_per_mile'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 
-df = df.sort_values('date')
-df['cum_miles'] = (df['run_time_min'] > 0).cumsum() * 2
-df['cum_pushups'] = df['pushups'].cumsum()
-df['cum_crunches'] = df['crunches'].cumsum()
+# Filter valid runs
+runs = df[df['distance'] > 0].copy()
+runs['cum_miles'] = runs['distance'].cumsum()
 
 GOAL_RUN_MIN = 18.0
 GOAL_PUSH = 45
@@ -44,12 +40,14 @@ GOAL_CRUNCH = 45
 
 st.title("Progress Dashboard")
 
+# Latest Stats
 col1, col2, col3 = st.columns(3)
 with col1:
-    latest_run = df['run_time_min'].iloc[-1]
-    prog = min(latest_run / GOAL_RUN_MIN, 1.0)
-    st.metric("2-Mile Run", f"{latest_run:.2f} min", f"{(GOAL_RUN_MIN-latest_run):.1f} min to goal")
-    st.progress(prog)
+    latest_run = runs['run_time_min'].iloc[-1] if not runs.empty else None
+    if latest_run:
+        prog = min(latest_run / GOAL_RUN_MIN, 1.0)
+        st.metric("2-Mile Time", f"{latest_run:.2f} min", f"{(GOAL_RUN_MIN-latest_run):.1f} to goal")
+        st.progress(prog)
 with col2:
     latest_p = df['pushups'].iloc[-1]
     prog_p = min(latest_p / GOAL_PUSH, 1.0)
@@ -61,36 +59,37 @@ with col3:
     st.metric("Crunches", latest_c, f"{GOAL_CRUNCH-latest_c} to goal")
     st.progress(prog_c)
 
+# Charts
 st.markdown("---")
-st.subheader("Trend Charts")
-
-tab1, tab2, tab3 = st.tabs(["Run Pace", "Push-ups", "Crunches"])
+tab1, tab2, tab3, tab4 = st.tabs(["Pace", "Distance", "Strength", "Energy"])
 
 with tab1:
-    fig = px.line(df, x='date', y='run_pace_min_per_mile',
-                  title="2-Mile Pace (min/mile)",
-                  labels={"run_pace_min_per_mile": "Pace"})
-    fig.add_hline(y=GOAL_RUN_MIN/2, line_dash="dash", line_color="red",
-                  annotation_text="Goal 9:00/mi")
+    fig = px.line(runs, x='date', y='pace_min_per_mile', title="Pace Trend (min/mile)")
+    fig.add_hline(y=9.0, line_dash="dash", line_color="red", annotation_text="Goal: 9:00/mi")
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
-    fig = px.bar(df, x='date', y='pushups', title="Push-ups per Session")
-    fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red")
+    fig = px.bar(runs, x='date', y='distance', title="Run Distance (miles)")
     st.plotly_chart(fig, use_container_width=True)
 
 with tab3:
-    fig = px.bar(df, x='date', y='crunches', title="Crunches per Session")
-    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red")
+    fig = px.line(df, x='date', y=['pushups', 'crunches'], title="Strength Progress")
+    fig.add_hline(y=45, line_dash="dash", line_color="red")
     st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("---")
-st.subheader("Cumulative Totals (Year-to-Date)")
+with tab4:
+    fig = px.scatter(df, x='date', y='felt_rating', size='distance',
+                     title="Energy Level (1–5) vs Run Distance",
+                     labels={"felt_rating": "How You Felt"})
+    st.plotly_chart(fig, use_container_width=True)
 
+# Cumulative
+st.markdown("---")
 colA, colB, colC = st.columns(3)
 with colA:
-    st.metric("Total Miles Run", f"{df['cum_miles'].iloc[-1]:.1f}")
+    total_miles = runs['cum_miles'].iloc[-1] if not runs.empty else 0
+    st.metric("Total Miles Run", f"{total_miles:.1f}")
 with colB:
-    st.metric("Total Push-ups", f"{int(df['cum_pushups'].iloc[-1])}")
+    st.metric("Total Push-ups", df['pushups'].sum())
 with colC:
-    st.metric("Total Crunches", f"{int(df['cum_crunches'].iloc[-1])}")
+    st.metric("Total Crunches", df['crunches'].sum())
