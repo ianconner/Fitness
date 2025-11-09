@@ -135,7 +135,6 @@ with st.form("log_form"):
             """, (st.session_state.user_id, date, distance, run_min, run_sec, pushups, crunches, felt))
             conn.commit()
             st.success("Session logged!")
-            st.balloons()
         except Exception as e:
             st.error(f"Error: {e}")
         finally:
