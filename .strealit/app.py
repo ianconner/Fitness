@@ -3,25 +3,33 @@ import streamlit as st
 import psycopg2
 from datetime import datetime
 
-# ——— DISABLE AUTO PAGE LINKS & CLEAN LAYOUT ———
+# ——— PAGE CONFIG: WIDE + NO CLIPPING ———
 st.set_page_config(
     page_title="SOPHIA",
-    layout="centered",
+    layout="wide",  # ← Prevents clipping
     initial_sidebar_state="expanded",
-    menu_items=None  # Removes hamburger menu
+    menu_items=None
 )
 
-# Hide Streamlit's default page navigation (the top "app | dashboard | AI Coach")
-hide_page_nav = """
+# ——— FORCE-HIDE STREAMLIT'S AUTO PAGE NAV (app | dashboard | AI Coach) ———
+hide_streamlit_nav = """
 <style>
-    /* Hide auto-generated page links at top */
-    .css-1d391kg, .css-1v0mbdj, .css-1v3fvcr {display: none !important;}
-    /* Optional: tighter spacing */
-    .block-container {padding-top: 1rem;}
-    .css-1y0t9j1 {padding: 1rem;}
+    /* Hide ALL auto-generated page links at the top */
+    .css-1d391kg, .css-1v0mbdj, .css-1v3fvcr, 
+    .css-1y0t9j1, .css-1v3fvcr a, 
+    section[data-testid="stSidebar"] > div:first-child {
+        display: none !important;
+    }
+    /* Remove top padding so content isn't cut off */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    /* Ensure sidebar has no extra junk */
+    .css-1y0t9j1 {display: none !important;}
 </style>
 """
-st.markdown(hide_page_nav, unsafe_allow_html=True)
+st.markdown(hide_streamlit_nav, unsafe_allow_html=True)
 
 # ——— DATABASE CONNECTION ———
 def get_db_connection():
@@ -60,10 +68,13 @@ init_db()
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# ——— LOGIN / SIGNUP (2 LINES, NO REDUNDANCY) ———
+# ——— LOGIN / SIGNUP (2 LINES, NO REDUNDANCY, VISIBLE) ———
 if not st.session_state.logged_in:
+    # Add breathing room at top
+    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+
     st.markdown(
-        "<h2 style='text-align: center; line-height: 1.2; margin-bottom: 1rem;'>"
+        "<h2 style='text-align: center; line-height: 1.2; margin-bottom: 1.5rem;'>"
         "WELCOME TO SOPHIA<br>"
         "<small style='font-weight: normal; color: #666;'>Smart Optimized Performance Health Intelligence Assistant</small>"
         "</h2>",
@@ -133,7 +144,8 @@ if st.sidebar.button("Logout", use_container_width=True):
         del st.session_state[key]
     st.rerun()
 
-# ——— HOME: LOG SESSION ———
+# ——— HOME: LOG SESSION (WITH TOP MARGIN) ———
+st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 st.markdown(f"### Log Session — {st.session_state.username}")
 
 with st.form("log_form"):
