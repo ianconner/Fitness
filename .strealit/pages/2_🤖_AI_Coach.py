@@ -9,16 +9,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -------------------------------------------------
-# DB Connection
+# DB Connection – Uses POSTGRES_URL
 # -------------------------------------------------
 def get_db_connection():
-    return psycopg2.connect(
-        host=os.getenv("PG_HOST"),
-        database=os.getenv("PG_DB"),
-        user=os.getenv("PG_USER"),
-        password=os.getenv("PG_PASS"),
-        port=os.getenv("PG_PORT", "5432")
-    )
+    url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
+    if not url:
+        st.error("Missing POSTGRES_URL in secrets!")
+        st.stop()
+    return psycopg2.connect(url)
 
 def get_logs():
     conn = get_db_connection()
@@ -46,10 +44,10 @@ genai.configure(api_key=gemini_api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 # -------------------------------------------------
-# Schedule Logic: Next Off-Day (Thu/Fri/Sat)
+# Next Off-Day (Thu/Fri/Sat)
 # -------------------------------------------------
 today = datetime.today().date()
-weekday = today.weekday()  # 0=Mon, 3=Thu, 4=Fri, 5=Sat
+weekday = today.weekday()
 days_ahead = (3 - weekday) % 7
 if days_ahead == 0:
     days_ahead = 7
