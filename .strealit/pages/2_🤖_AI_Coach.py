@@ -47,7 +47,7 @@ if not gemini_api_key:
     st.stop()
 
 genai.configure(api_key=gemini_api_key)
-model = genai.GenerativeModel('gemini-2.5-flash')  # Stable, fast, reliable
+model = genai.GenerativeModel('gemini-1.5-flash')  # Stable, fast, reliable
 
 # Build SHORT, SAFE prompt
 summary = f"""
