@@ -24,17 +24,25 @@ def init_db():
         CREATE TABLE IF NOT EXISTS logs (
             id SERIAL PRIMARY KEY,
             date DATE NOT NULL,
-            distance REAL DEFAULT 0,
+            distance REAL DEFAULT 2.0,
             run_minutes REAL,
             run_seconds REAL,
-            pushups INTEGER,
-            crunches INTEGER,
-            felt_rating INTEGER CHECK (felt_rating BETWEEN 1 AND 5)
+            pushups INTEGER DEFAULT 0,
+            crunches INTEGER DEFAULT 0,
+            felt_rating INTEGER DEFAULT 3 CHECK (felt_rating BETWEEN 1 AND 5)
         )
     ''')
+    # Add columns if they don't exist (safe upgrade)
+    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS distance REAL DEFAULT 2.0;")
+    except: pass
+    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS felt_rating INTEGER DEFAULT 3;")
+    except: pass
+    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_minutes REAL;")
+    except: pass
+    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_seconds REAL;")
+    except: pass
     conn.commit()
     conn.close()
-
 def add_log(date, distance, run_min, run_sec, pushups, crunches, felt):
     conn = get_db_connection()
     c = conn.cursor()
