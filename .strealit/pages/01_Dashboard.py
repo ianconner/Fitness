@@ -1,9 +1,44 @@
-# pages/1_Dashboard.py
+# pages/01_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import psycopg2
 from datetime import datetime
+
+# ——— PAGE CONFIG ———
+st.set_page_config(
+    page_title="Dashboard - SOPHIA",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ——— HIDE STREAMLIT'S AUTO NAV ———
+st.markdown("""
+<style>
+    /* Hide Streamlit's default page navigation menu */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    
+    /* Reduce top padding */
+    .block-container {padding-top: 2rem !important;}
+</style>
+""", unsafe_allow_html=True)
+
+# ——— CHECK LOGIN ———
+if 'logged_in' not in st.session_state or not st.session_state.logged_in:
+    st.error("Please log in from the home page.")
+    st.stop()
+
+# ——— SIDEBAR NAVIGATION ———
+st.sidebar.success(f"**{st.session_state.username}**")
+
+st.sidebar.page_link("app.py", label="🏠 Home")
+st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
+st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
+
+if st.sidebar.button("Logout", use_container_width=True):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # ---------- DB ----------
 def get_db_connection():
@@ -105,7 +140,7 @@ tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 with tab1:
     fig = px.line(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend")
     fig.add_hline(y=GOAL_RUN_MIN/2, line_dash="dash", line_color="red")
-    fig.update_xaxes(tickformat="%b %d")          # DATE ONLY
+    fig.update_xaxes(tickformat="%b %d")
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
