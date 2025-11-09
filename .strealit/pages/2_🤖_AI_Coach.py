@@ -91,7 +91,7 @@ prompt = f"""You are **SOPHIA** — **S**mart **O**ptimized **P**erformance **H*
 
 User: {st.session_state.username}, 39 y/o male.
 Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days remaining)
-Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
+Goals: 2-mile less than or equal to {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
 
 Today: {today}
 Next Session: {next_session.strftime('%A, %B %d')}
@@ -103,7 +103,7 @@ Push-up trend: {df['pushups'].diff().mean():+.1f}/session
 Recent felt rating: {last_5['felt_rating'].mean():.1f}/5
 
 --- TODAY'S SESSION (Only) ---
-Provide **one** <50-minute bodyweight session for **{next_session.strftime('%A')}**.
+Provide **one** less than 50-minute bodyweight session for **{next_session.strftime('%A')}**.
 Include:
 - Warm-up (time + pace or movement)
 - Main set (intervals, reps, rest)
