@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -------------------------------------------------
-# DB Connection – POSTGRES_URL
+# DB Connection – POSTGRES_URL ONLY
 # -------------------------------------------------
 def get_db_connection():
     url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
@@ -32,17 +32,18 @@ def init_db():
             felt_rating INTEGER DEFAULT 3 CHECK (felt_rating BETWEEN 1 AND 5)
         )
     ''')
-    # Add columns if they don't exist (safe upgrade)
-    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS distance REAL DEFAULT 2.0;")
-    except: pass
-    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS felt_rating INTEGER DEFAULT 3;")
-    except: pass
-    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_minutes REAL;")
-    except: pass
-    try: c.execute("ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_seconds REAL;")
-    except: pass
+    # Safe upgrades
+    for col in [
+        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS distance REAL DEFAULT 2.0;",
+        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_minutes REAL;",
+        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_seconds REAL;",
+        "ALTER TABLE logs ADD COLUMN IF NOT EXISTS felt_rating INTEGER DEFAULT 3;"
+    ]:
+        try: c.execute(col)
+        except: pass
     conn.commit()
     conn.close()
+
 def add_log(date, distance, run_min, run_sec, pushups, crunches, felt):
     conn = get_db_connection()
     c = conn.cursor()
@@ -60,7 +61,7 @@ def get_logs():
     return df
 
 # -------------------------------------------------
-# UI – Enhanced Log Form
+# UI
 # -------------------------------------------------
 st.set_page_config(page_title="USAF PT Tracker", layout="wide")
 st.title("USAF PT Tracker – Log Your Run")
@@ -69,23 +70,19 @@ init_db()
 
 with st.form("log_form"):
     st.subheader("Log Today’s Session")
-
     col1, col2, col3 = st.columns(3)
     with col1:
         date = st.date_input("Date", value=datetime.today())
-        distance = st.number_input("Run Distance (miles)", min_value=0.0, value=2.0, step=0.1,
-                                   help="Any run — 1 mi, 3 mi, 2-mile test, etc.")
+        distance = st.number_input("Run Distance (miles)", min_value=0.0, value=2.0, step=0.1)
     with col2:
         run_min = st.number_input("Run Time – minutes", min_value=0, value=0, step=1)
         run_sec = st.number_input("Run Time – seconds", min_value=0, max_value=59, value=0, step=1)
     with col3:
-        pushups = st.number_input("Push-ups (1 min max)", min_value=0, value=0, step=1)
-        crunches = st.number_input("Crunches (2 min max)", min_value=0, value=0, step=1)
-
-    st.markdown("---")
+        pushups = st.number_input("Push-ups", min_value=0, value=0, step=1)
+        crunches = st.number_input("Crunches", min_value=0, value=0, step=1)
     felt = st.slider("How did you feel? (1 = wrecked, 5 = flying)", 1, 5, 3)
-
     submitted = st.form_submit_button("Log It")
     if submitted:
         add_log(str(date), distance, run_min, run_sec, pushups, crunches, felt)
-        st.success("Logged! Coach Riley is reviewing your pace and energy.")
+        st.success("Logged! Coach Riley is analyzing your pace.")
+        st.balloons()
