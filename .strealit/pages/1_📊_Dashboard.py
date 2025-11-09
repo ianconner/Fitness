@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import psycopg2  # <-- ADDED
+import psycopg2
 from datetime import datetime
 
 # ——— DB ———
@@ -27,6 +27,7 @@ df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
+valid_df['cum_miles'] = valid_df['distance'].cumsum()
 
 # ——— GOAL SETTINGS ———
 st.sidebar.markdown("## Goal Settings")
@@ -56,7 +57,8 @@ st.title("Progress Dashboard")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Projected 2-Mile", projected_str, f"Last 5: {avg_pace:.2f} min/mi")
+    progress_val = max(0, min(1, (20 - projected_2mi_min) / (20 - GOAL_RUN_MIN))) if pd.notna(projected_2mi_min) else 0
+    st.metric("Projected 2-Mile", projected_str, f"Last {len(last_5)}: {avg_pace:.2f} min/mi")
     if projected_2mi_min <= GOAL_RUN_MIN:
         st.markdown("<div style='background-color:#4CAF50;height:8px;'></div>", unsafe_allow_html=True)
     elif projected_2mi_min <= 20:
@@ -72,12 +74,12 @@ with col3:
     latest_c = df['crunches'].iloc[-1]
     st.metric("Crunches", latest_c, f"{GOAL_CRUNCH - latest_c} to goal")
 
-# ——— TRENDS ———
+# Trends
 st.markdown("---")
 st.subheader("Trends")
 colA, colB = st.columns(2)
 with colA:
-    st.metric("Total Miles", f"{valid_df['distance'].sum():.1f}")
+    st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
 with colB:
     days_to_goal = (GOAL_DATE - datetime.today().date()).days
     st.metric("Days to Goal", f"{days_to_goal}")
