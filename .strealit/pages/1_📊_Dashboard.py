@@ -97,7 +97,7 @@ colA, colB = st.columns(2)
 with colA:
     st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
 with colB:
-    days_to_goal = (GOAL_DATE - datetime.today().date()).days)
+    days_to_goal = (GOAL_DATE - datetime.today().date()).days
     st.metric("Days to Goal", f"{days_to_goal}")
 
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
@@ -105,7 +105,7 @@ tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 with tab1:
     fig = px.line(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend")
     fig.add_hline(y=GOAL_RUN_MIN/2, line_dash="dash", line_color="red")
-    fig.update_xaxes(tickformat="%b %d")          # <-- DATE ONLY
+    fig.update_xaxes(tickformat="%b %d")          # DATE ONLY
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
