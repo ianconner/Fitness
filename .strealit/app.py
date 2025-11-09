@@ -8,16 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -------------------------------------------------
-# PostgreSQL Connection
+# DB Connection – Uses POSTGRES_URL
 # -------------------------------------------------
 def get_db_connection():
-    return psycopg2.connect(
-        host=os.getenv("PG_HOST"),
-        database=os.getenv("PG_DB"),
-        user=os.getenv("PG_USER"),
-        password=os.getenv("PG_PASS"),
-        port=os.getenv("PG_PORT", "5432")
-    )
+    url = st.secrets.get("POSTGRES_URL") or os.getenv("POSTGRES_URL")
+    if not url:
+        st.error("Missing POSTGRES_URL in Streamlit secrets!")
+        st.stop()
+    return psycopg2.connect(url)
 
 def init_db():
     conn = get_db_connection()
