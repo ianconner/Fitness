@@ -154,19 +154,19 @@ with colY:
 # ——— TABS ———
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
-# ——— TAB 1: PACE (FULLY RESTORED) ———
+# ——— TAB 1: PACE (WITH FULL LEGEND) ———
 with tab1:
     fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (min/mi)")
     fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Your Pace Trend Line', showlegend=True)
+                    name='Your Pace Trend Line (Green)', showlegend=True)
     avg_pace_val = valid_df['pace_min_per_mi'].mean()
     fig.add_hline(y=avg_pace_val, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Average Pace: {format_pace(avg_pace_val)}",
+                  line_width=2, annotation_text=f"Avg: {format_pace(avg_pace_val)}",
                   annotation_position="right")
     goal_pace = GOAL_RUN_MIN / 2
     fig.add_hline(y=goal_pace, line_dash="dash", line_color="red",
-                  line_width=2, annotation_text=f"Goal Pace: {format_pace(goal_pace)}",
+                  line_width=2, annotation_text=f"Goal: {format_pace(goal_pace)}",
                   annotation_position="right")
 
     # MM:SS Y-axis
@@ -174,7 +174,7 @@ with tab1:
     y_max = valid_df['pace_min_per_mi'].max()
     y_range_min = int(y_min) - 1
     y_range_max = int(y_max) + 2
-    tick_vals = [i/2 for i in range(y_range_min * 2, y_range_max * 2 + 1)]
+    tick_vals = [i/2 for i in range(y_range_min*2, y_range_max*2 + 1)]
     tick_labels = [format_pace(v) for v in tick_vals]
     fig.update_yaxes(tickmode='array', tickvals=tick_vals, ticktext=tick_labels,
                      title="Pace (min:sec per mile)")
@@ -185,75 +185,48 @@ with tab1:
         customdata=valid_df[['pace_display']].values
     )
     fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 2: PUSH-UPS ———
+# ——— TAB 2: PUSH-UPS (WITH FULL LEGEND) ———
 with tab2:
     fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
     fig.add_scatter(x=df['date'], y=df['pushups'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Session Trend Line', showlegend=True)
+                    name='Session Trend Line (Green)', showlegend=True)
     fig.add_scatter(x=df['date'], y=df['cum_pushups'],
                     mode='lines', line=dict(color='purple', width=3),
-                    name='Cumulative Total', showlegend=True)
+                    name='Cumulative Total (Purple)', showlegend=True)
     avg_push = df['pushups'].mean()
     fig.add_hline(y=avg_push, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Average: {avg_push:.0f}",
+                  line_width=2, annotation_text=f"Avg: {avg_push:.0f}",
                   annotation_position="right")
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red",
                   line_width=2, annotation_text=f"Goal: {GOAL_PUSH}",
                   annotation_position="right")
     fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 3: CRUNCHES ———
+# ——— TAB 3: CRUNCHES (WITH FULL LEGEND) ———
 with tab3:
     fig = px.scatter(df, x='date', y='crunches', title="Crunches")
     fig.add_scatter(x=df['date'], y=df['crunches'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Session Trend Line', showlegend=True)
+                    name='Session Trend Line (Green)', showlegend=True)
     fig.add_scatter(x=df['date'], y=df['cum_crunches'],
                     mode='lines', line=dict(color='purple', width=3),
-                    name='Cumulative Total', showlegend=True)
+                    name='Cumulative Total (Purple)', showlegend=True)
     avg_crunch = df['crunches'].mean()
     fig.add_hline(y=avg_crunch, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Average: {avg_crunch:.0f}",
+                  line_width=2, annotation_text=f"Avg: {avg_crunch:.0f}",
                   annotation_position="right")
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red",
                   line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}",
                   annotation_position="right")
     fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
+    fig.update_layout(showlegend=True,
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
