@@ -1,34 +1,4 @@
-with tab3:
-    # Create crunches chart
-    fig = px.scatter(df, x='date', y='crunches', title="Crunches")
-    
-    # Add green line connecting the dots
-    fig.add_scatter(x=df['date'], y=df['crunches'], 
-                    mode='lines', line=dict(color='green', width=2),
-                    name='Your Crunches', showlegend=True)
-    
-    # Add yellow average line
-    avg_crunches = df['crunches'].mean()
-    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
-    
-    # Add red dashed goal line
-    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
-    
-    fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
-    st.plotly_chart(fig, use_container_width=True)# pages/01_Dashboard.py
+# pages/01_Dashboard.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -286,14 +256,12 @@ with tab3:
     
     # Add yellow average line
     avg_crunches = df['crunches'].mean()
-    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="yellow", 
-                  line_width=2, annotation_text=f"Avg: {avg_crunches:.0f}", 
-                  annotation_position="right")
+    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
+                  line_width=2, name='Average')
     
     # Add red dashed goal line
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
-                  line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}", 
-                  annotation_position="right")
+                  line_width=2, name='Goal')
     
     fig.update_xaxes(tickformat="%b %d")
     fig.update_layout(
