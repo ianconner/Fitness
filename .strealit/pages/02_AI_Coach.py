@@ -167,55 +167,55 @@ Training Urgency: {urgency}
             data_summary += f"\n{row['date'].strftime('%m/%d')} | {row['distance']:.1f}mi @ {pace_str}/mi | {row['pushups']}pu | {row['crunches']}cr | Felt: {row['felt_rating']}/5"
 
         # Enhanced prompt for comprehensive analysis
-        prompt = f"""You are SOPHIA (Smart Optimized Performance Health Intelligence Assistant), an expert fitness coach analyzing training data.
+        prompt = f"""You are SOPHIA (Smart Optimized Performance Health Intelligence Assistant), speaking directly to your athlete.
 
 {data_summary}
 
-Based on this data, provide a COMPREHENSIVE analysis with these sections:
+Speak directly to {st.session_state.username} in first and second person (I/you), as if you're having a conversation. Be warm but professional. Structure your response with these sections:
 
 1. **PERFORMANCE ANALYSIS**
-   - Current standing vs each goal (be specific with numbers and gaps)
-   - Assessment of each trend (pace, push-ups, crunches)
-   - Identify strengths and weaknesses
-   - Comment on felt ratings and recovery
+   Talk directly about where you currently stand vs each goal. Use phrases like "You're currently at..." and "I see you've been..."
+   - Assess your pace trend, push-ups, and crunches
+   - Point out your strengths and what needs work
+   - Comment on your felt ratings and how you're recovering
 
 2. **REST & RECOVERY ASSESSMENT**
-   - Evaluate the {days_until_workout}-day rest period before next workout
-   - Is this TOO MUCH rest (detraining risk), OPTIMAL, or TOO LITTLE (overtraining risk)?
-   - Given {days_since_workout} days since last workout, what adjustments are needed?
-   - Specific recommendations about training frequency
+   - Discuss the {days_until_workout}-day gap before your next workout
+   - Tell you directly if I think this is too much rest, just right, or too little
+   - Given it's been {days_since_workout} days since your last workout, share what adjustments you should make
+   - Give you specific recommendations about training frequency
 
-3. **CONSTRUCTIVE IMPROVEMENT STEPS**
-   Provide 5-7 specific, actionable steps to close performance gaps:
-   - For running: interval strategies, pacing work, distance recommendations
-   - For push-ups: volume progression, technique cues, frequency
-   - For crunches: core strengthening approach, rep schemes
-   - Recovery and nutrition considerations
-   - Mental preparation strategies
+3. **HERE'S HOW WE'LL CLOSE THE GAPS**
+   Give 5-7 specific steps you need to take, speaking directly:
+   - "For your running, I want you to..."
+   - "To hit your push-up goal, start by..."
+   - "Your core work needs..."
+   - Include recovery and nutrition advice
+   - Mental preparation tips
 
-4. **COMPLETE WORKOUT PLAN** (for next session on {next_workout_date.strftime('%A, %B %d')})
-   Provide a detailed, minute-by-minute workout:
+4. **YOUR WORKOUT PLAN** (for {next_workout_date.strftime('%A, %B %d')})
+   Write this like I'm coaching you through it:
    
    **Warm-up (10 min)**
-   - Exact movements, duration, intensity
+   - "Start with..." (exact movements, duration)
    
    **Main Set (30-35 min)**
-   - Running: specific intervals/distance with pace targets and rest periods
-   - Push-ups: sets, reps, tempo, rest
-   - Crunches: sets, reps, variations, rest
-   - Include RPE (Rate of Perceived Exertion) targets
+   - "Here's what you're running today..."
+   - "For push-ups, I want you to..."
+   - "Crunches will be..."
+   - Include RPE targets: "This should feel like a 7/10"
    
    **Cool-down (5-10 min)**
-   - Stretching, recovery movements
+   - "Finish with..."
    
    **Total Duration**: ~50 minutes
 
-5. **MOTIVATION & SCIENCE**
-   - 2-3 sentences of honest, evidence-based encouragement
-   - Reference relevant exercise science (VO2max, progressive overload, etc.)
-   - No generic hype—be clinical but supportive
+5. **REAL TALK & MOTIVATION**
+   - 2-3 sentences speaking directly about where you are and what's possible
+   - Reference exercise science naturally: "Your VO2max will adapt if we..."
+   - Be honest but encouraging
 
-Tone: Expert, data-driven, honest, constructive. Focus on closing gaps with specific numbers and actionable steps.
+Tone: Like a knowledgeable coach talking to their athlete. Use "I" when referring to yourself as SOPHIA, "you/your" when referring to {st.session_state.username}. Be direct, honest, data-driven, but supportive. No third person references.
 """
 
         try:
@@ -246,19 +246,19 @@ st.markdown("*Questions about goals, training science, adjustments, nutrition, r
 q = st.text_input("Your question:")
 if st.button("💡 Get Answer", use_container_width=True) and q:
     with st.spinner("SOPHIA is thinking…"):
-        q_prompt = f"""You are SOPHIA, an expert fitness coach. Answer this question based on the athlete's data:
+        q_prompt = f"""You are SOPHIA, speaking directly to {st.session_state.username}. Answer their question in a conversational way, like you're talking to them face-to-face.
 
-Question: {q}
+Their Question: {q}
 
-Athlete Context:
-- Name: {st.session_state.username}, 39M
-- Goal Date: {GOAL_DATE} ({days_to_goal} days)
+Context About Them:
+- {st.session_state.username}, 39M
+- Goal Date: {GOAL_DATE} ({days_to_goal} days away)
 - Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
-- Current: Projected 2-mile {proj_str} | Last session: {df['pushups'].iloc[0]} push-ups, {df['crunches'].iloc[0]} crunches
+- Current Performance: Projected 2-mile is {proj_str} | Last session: {df['pushups'].iloc[0]} push-ups, {df['crunches'].iloc[0]} crunches
 - Trends: Pace {pace_trend:+.3f} min/mi, Push-ups {push_trend:+.1f}/session, Crunches {crunch_trend:+.1f}/session
-- Training Frequency: Last workout {days_since_workout} days ago, next planned in {days_until_workout} days
+- Training: Last workout was {days_since_workout} days ago, next planned in {days_until_workout} days
 
-Provide a clear, evidence-based answer in 4-6 sentences. Cite exercise science principles when relevant. Be direct and constructive."""
+Respond in 4-6 sentences using "I" (as SOPHIA) and "you" (speaking to them). Reference exercise science naturally when relevant. Be direct, honest, and helpful - like a knowledgeable coach having a conversation."""
 
         try:
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}",
