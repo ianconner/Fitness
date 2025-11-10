@@ -5,37 +5,41 @@ import psycopg2
 import requests
 from datetime import datetime, timedelta
 
-# ---------- FIX: get_db_connection moved to top ----------
-def get_db_connection():
-    return psycopg2.connect(st.secrets["POSTGRES_URL"])
+# ——— PAGE CONFIG ———
+st.set_page_config(
+    page_title="SOPHIA Coach",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(page_title="SOPHIA Coach", layout="wide")
-
+# ——— HIDE STREAMLIT'S AUTO NAV ———
 st.markdown("""
 <style>
-[data-testid="stSidebarNav"] {display: none !important;}
-.block-container {padding-top: 4rem !important;}
+    /* Hide Streamlit's default page navigation menu */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    
+    /* Reduce top padding */
+    .block-container {padding-top: 4rem !important;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- AUTH ----------
+# ——— CHECK LOGIN ———
 if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.error("Please log in from the home page.")
     st.stop()
 
-# ---------- SIDEBAR ----------
+# ——— SIDEBAR NAVIGATION ———
 st.sidebar.success(f"**{st.session_state.username}**")
 
 # Preferred Name Setting
 with st.sidebar.expander("⚙️ Settings"):
     current_name = st.session_state.get('preferred_name', st.session_state.username)
-    new_preferred_name = st.text_input("What should SOPHIA call you?", value=current_name)
+    new_preferred_name = st.text_input("What should SOPHIA call you?", value=current_name, key="pref_name_input")
     if st.button("Save Name", key="save_pref_name"):
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("UPDATE users SET preferred_name = %s WHERE id = %s",
-                    (new_preferred_name, st.session_state.user_id))
+        cur.execute("UPDATE users SET preferred_name = %s WHERE id = %s", 
+                   (new_preferred_name, st.session_state.user_id))
         conn.commit()
         cur.close()
         conn.close()
@@ -51,7 +55,10 @@ if st.sidebar.button("Logout", use_container_width=True):
         del st.session_state[key]
     st.switch_page("app.py")
 
-# ---------- DATA ----------
+# ---------- DB ----------
+def get_db_connection():
+    return psycopg2.connect(st.secrets["POSTGRES_URL"])
+
 def get_logs():
     conn = get_db_connection()
     df = pd.read_sql_query(
@@ -66,172 +73,225 @@ if df.empty:
     st.warning("Log a session first to get personalized coaching from SOPHIA.")
     st.stop()
 
-# ---------- ANALYSIS ----------
 df['date'] = pd.to_datetime(df['date'])
-df['run_time_min'] = df['run_minutes'] + df['run_seconds'] / 60
+df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
 
+# ---------- GOALS ----------
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
-GOAL_PUSH = st.session_state.get("goal_push", 45)
-GOAL_CRUNCH = st.session_state.get("goal_crunch", 45)
-GOAL_DATE = st.session_state.get("goal_date", datetime.now().date())
+GOAL_PUSH    = st.session_state.get("goal_push",    45)
+GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
+GOAL_DATE    = st.session_state.get("goal_date",    datetime.now().date())
 
+# ---------- HORIZON ----------
 today = datetime.now().date()
 days_to_goal = (GOAL_DATE - today).days
 
-# ---------- HEADER ----------
-st.markdown("### 🤖 SOPHIA – Smart Optimized Performance Health Intelligence Assistant")
-
-preferred_name = st.session_state.get('preferred_name', st.session_state.username)
-st.markdown(f"**Coaching {preferred_name}** | Goal Date: **{GOAL_DATE.strftime('%B %d, %Y')}** ({days_to_goal} days remaining)")
-
-# ---------- PERFORMANCE SUMMARY ----------
-col1, col2, col3 = st.columns(3)
-with col1:
-    last_date = df['date'].max()
-    st.metric("Last Session", last_date.strftime("%b %d, %Y"))
-with col2:
-    avg_pace = valid_df['pace_min_per_mi'].mean()
-    pace_str = f"{int(avg_pace):02d}:{int((avg_pace % 1) * 60):02d}" if pd.notna(avg_pace) else "N/A"
-    st.metric("Average Pace", pace_str)
-with col3:
-    total_miles = valid_df['distance'].sum()
-    st.metric("Total Miles Logged", f"{total_miles:.1f}")
-
-st.markdown("---")
-
-# ---------- INSIGHT GENERATION ----------
-st.subheader("📈 Performance Summary")
-
-# Calculate trend stats
-recent_df = valid_df.head(5).copy()
-if not recent_df.empty:
-    avg_pace_recent = recent_df['pace_min_per_mi'].mean()
-    avg_push_recent = df['pushups'].head(5).mean()
-    avg_crunch_recent = df['crunches'].head(5).mean()
+if days_to_goal <= 30:
+    urgency = "MAX";      intensity = 1.3; volume = 0.7; progression = "aggressive taper"
+elif days_to_goal <= 90:
+    urgency = "HIGH";     intensity = 1.2; volume = 0.8; progression = "linear peaking"
+elif days_to_goal <= 180:
+    urgency = "MEDIUM";   intensity = 1.0; volume = 1.0; progression = "periodized"
 else:
-    avg_pace_recent, avg_push_recent, avg_crunch_recent = pd.NA, pd.NA, pd.NA
+    urgency = "LOW";      intensity = 0.9; volume = 1.1; progression = "base building"
 
-trend_summary = f"""
-- **Average pace (last 5 runs):** {avg_pace_recent:.2f} min/mi  
-- **Average push-ups:** {avg_push_recent:.0f}  
-- **Average crunches:** {avg_crunch_recent:.0f}  
-- **Days until goal:** {days_to_goal}  
-"""
+# ---------- PROJECTIONS ----------
+last_5 = valid_df.head(5)
+last_10 = valid_df.head(10)
+avg_pace = last_5['pace_min_per_mi'].mean()
+proj_2mi = avg_pace * 2
+proj_str = f"{int(proj_2mi):02d}:{int((proj_2mi % 1)*60):02d}"
 
-st.markdown(trend_summary)
+# Calculate trends
+pace_trend = valid_df['pace_min_per_mi'].diff().mean() if len(valid_df) > 1 else 0
+push_trend = df['pushups'].diff().mean() if len(df) > 1 else 0
+crunch_trend = df['crunches'].diff().mean() if len(df) > 1 else 0
 
-# ---------- AI ANALYSIS ----------
-st.markdown("### 🧠 SOPHIA's Personalized Feedback")
+# Get last workout date
+last_workout = df['date'].iloc[0].date()
+days_since_workout = (today - last_workout).days
 
-# Load GROQ API key
+# ---------- GROQ ----------
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    st.error("Missing GROQ_API_KEY in Streamlit secrets. Please add it to .streamlit/secrets.toml.")
+    st.error("Missing GROQ_API_KEY")
     st.stop()
-
-# LLM parameters
-MODEL = "llama-3.1-8b-instant"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = "llama-3.1-8b-instant"
 
-# Data summary for LLM context
-summary_context = f"""
-Athlete Name: {preferred_name}
-Total Logs: {len(df)}
-Recent Average Pace: {avg_pace_recent:.2f} min/mi
-Goal: 2-mile in {GOAL_RUN_MIN:.1f} min by {GOAL_DATE}
-Push-ups Goal: {GOAL_PUSH}
-Crunches Goal: {GOAL_CRUNCH}
-Days Remaining: {days_to_goal}
+# ---------- PAGE HEADER ----------
+st.markdown("### 🤖 SOPHIA – Smart Optimized Performance Health Intelligence Assistant")
+preferred_name = st.session_state.get('preferred_name', st.session_state.username)
+st.markdown(f"**Coaching {preferred_name}** | Goal Date: **{GOAL_DATE.strftime('%B %d, %Y')}** ({days_to_goal} days)")
 
-Recent Performance (Last 5):
-{recent_df[['date', 'distance', 'run_minutes', 'run_seconds', 'pushups', 'crunches', 'felt_rating']].to_string(index=False)}
-"""
-
-# ---------- SOPHIA’s COACHING PROMPT ----------
-system_prompt = """
-You are SOPHIA, an AI fitness coach trained for Air Force fitness readiness.
-Your job is to:
-1. Analyze the athlete’s recent run, push-up, and crunch data.
-2. Identify physical strengths and weaknesses.
-3. Offer specific, tactical recommendations for the next 7 days.
-4. Provide encouragement using a professional tone with Air Force-style precision.
-Keep responses concise but insightful.
-"""
-
-# Display prompt for debug
-with st.expander("🪶 Raw AI Input Context"):
-    st.code(summary_context)
-
-# ---------- AI RESPONSE ----------
-if st.button("🎯 Generate Full SOPHIA Coaching Plan", use_container_width=True):
-    with st.spinner("Analyzing performance and generating your tailored plan..."):
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        payload = {
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": summary_context}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 900,
-        }
-
-        try:
-            response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            ai_reply = data["choices"][0]["message"]["content"]
-
-            st.success("✅ SOPHIA’s 7-Day Plan Generated:")
-            st.markdown(ai_reply)
-
-        except Exception as e:
-            st.error(f"Failed to get AI response: {e}")
-
+# ---------- USER INPUT: NEXT WORKOUT ----------
 st.markdown("---")
+col1, col2 = st.columns([2, 1])
+with col1:
+    next_workout_date = st.date_input(
+        "When is your next planned workout?",
+        value=today + timedelta(days=1),
+        min_value=today
+    )
+with col2:
+    days_until_workout = (next_workout_date - today).days
+    st.metric("Days Until Workout", days_until_workout)
 
-# ---------- CUSTOM Q&A WITH SOPHIA ----------
-st.subheader("💬 Ask SOPHIA a Custom Question")
-user_query = st.text_area("Type your question or request (e.g., 'How can I improve my run time in 2 weeks?')", height=100)
+# ---------- GENERATE ANALYSIS ----------
+if st.button("🎯 Get SOPHIA's Complete Analysis & Workout Plan", use_container_width=True):
+    with st.spinner("SOPHIA is analyzing your data and creating your personalized plan..."):
+        
+        # Build comprehensive data context
+        preferred_name = st.session_state.get('preferred_name', st.session_state.username)
+        data_summary = f"""
+=== ATHLETE PROFILE ===
+Name: {preferred_name}
+Age: 39 years old, Male
+Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days remaining)
+Training Urgency: {urgency}
 
-if st.button("Ask SOPHIA", use_container_width=True):
-    if not user_query.strip():
-        st.warning("Please enter a question first.")
-        st.stop()
-    with st.spinner("SOPHIA is preparing your answer..."):
+=== PERFORMANCE GOALS ===
+• 2-Mile Run: ≤ {GOAL_RUN_MIN}:00 minutes
+• Push-ups: {GOAL_PUSH} reps
+• Crunches: {GOAL_CRUNCH} reps
+
+=== CURRENT PERFORMANCE (Last 5 Sessions) ===
+• Average Pace: {avg_pace:.2f} min/mi
+• Projected 2-Mile Time: {proj_str}
+• Gap to Goal: {(proj_2mi - GOAL_RUN_MIN):.2f} minutes {"BELOW goal! ✓" if proj_2mi <= GOAL_RUN_MIN else "ABOVE goal"}
+• Latest Push-ups: {df['pushups'].iloc[0]} (Goal: {GOAL_PUSH}, Gap: {df['pushups'].iloc[0] - GOAL_PUSH:+d})
+• Latest Crunches: {df['crunches'].iloc[0]} (Goal: {GOAL_CRUNCH}, Gap: {df['crunches'].iloc[0] - GOAL_CRUNCH:+d})
+• Average Felt Rating: {last_5['felt_rating'].mean():.1f}/5
+
+=== TRAINING TRENDS (Session-to-Session Changes) ===
+• Pace Trend: {pace_trend:+.3f} min/mi per session {"(IMPROVING ✓)" if pace_trend < 0 else "(DECLINING)" if pace_trend > 0 else "(STABLE)"}
+• Push-ups Trend: {push_trend:+.1f} reps/session {"(IMPROVING ✓)" if push_trend > 0 else "(DECLINING)" if push_trend < 0 else "(STABLE)"}
+• Crunches Trend: {crunch_trend:+.1f} reps/session {"(IMPROVING ✓)" if crunch_trend > 0 else "(DECLINING)" if crunch_trend < 0 else "(STABLE)"}
+
+=== TRAINING FREQUENCY ===
+• Total Sessions Logged: {len(df)}
+• Last Workout: {last_workout.strftime('%B %d, %Y')} ({days_since_workout} days ago)
+• Next Planned Workout: {next_workout_date.strftime('%B %d, %Y')} ({days_until_workout} days from now)
+• Rest Period: {days_until_workout} days
+
+=== DETAILED SESSION HISTORY (Last 10) ===
+"""
+        for idx, row in df.head(10).iterrows():
+            pace = row['pace_min_per_mi'] if pd.notna(row['pace_min_per_mi']) else 0
+            pace_str = f"{int(pace):02d}:{int((pace % 1)*60):02d}" if pace > 0 else "N/A"
+            data_summary += f"\n{row['date'].strftime('%m/%d')} | {row['distance']:.1f}mi @ {pace_str}/mi | {row['pushups']}pu | {row['crunches']}cr | Felt: {row['felt_rating']}/5"
+
+        # Enhanced prompt for comprehensive analysis
+        prompt = f"""You are SOPHIA (Smart Optimized Performance Health Intelligence Assistant), speaking directly to your athlete.
+
+{data_summary}
+
+Speak directly to {preferred_name} in first and second person (I/you), as if you're having a conversation. Be warm but professional. Structure your response with these sections:
+
+1. **PERFORMANCE ANALYSIS**
+   Talk directly about where you currently stand vs each goal. Use phrases like "You're currently at..." and "I see you've been..."
+   - Assess your pace trend, push-ups, and crunches
+   - Point out your strengths and what needs work
+   - Comment on your felt ratings and how you're recovering
+
+2. **REST & RECOVERY ASSESSMENT**
+   - Discuss the {days_until_workout}-day gap before your next workout
+   - Tell you directly if I think this is too much rest, just right, or too little
+   - Given it's been {days_since_workout} days since your last workout, share what adjustments you should make
+   - Give you specific recommendations about training frequency
+
+3. **HERE'S HOW WE'LL CLOSE THE GAPS**
+   Give 5-7 specific steps you need to take, speaking directly:
+   - "For your running, I want you to..."
+   - "To hit your push-up goal, start by..."
+   - "Your core work needs..."
+   - Include recovery and nutrition advice
+   - Mental preparation tips
+
+4. **YOUR WORKOUT PLAN** (for {next_workout_date.strftime('%A, %B %d')})
+   Write this like I'm coaching you through it:
+   
+   **Warm-up (10 min)**
+   - "Start with..." (exact movements, duration)
+   
+   **Main Set (30-35 min)**
+   - "Here's what you're running today..."
+   - "For push-ups, I want you to..."
+   - "Crunches will be..."
+   - Include RPE targets: "This should feel like a 7/10"
+   
+   **Cool-down (5-10 min)**
+   - "Finish with..."
+   
+   **Total Duration**: ~50 minutes
+
+5. **REAL TALK & MOTIVATION**
+   - 2-3 sentences speaking directly about where you are and what's possible
+   - Reference exercise science naturally: "Your VO2max will adapt if we..."
+   - Be honest but encouraging
+
+Tone: Like a knowledgeable coach talking to their athlete. Use "I" when referring to yourself as SOPHIA, "you/your" when referring to {preferred_name}. Be direct, honest, data-driven, but supportive. No third person references.
+"""
+
         try:
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            }
-
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}",
+                       "Content-Type": "application/json"}
             payload = {
                 "model": MODEL,
-                "messages": [
-                    {"role": "system", "content": "You are SOPHIA, a U.S. Air Force fitness AI coach."},
-                    {"role": "user", "content": f"Context:\n{summary_context}\n\nQuestion:\n{user_query}"}
-                ],
-                "temperature": 0.8,
-                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.6,
+                "max_tokens": 2000
             }
+            r = requests.post(GROQ_URL, headers=headers, json=payload, timeout=45)
+            r.raise_for_status()
+            plan = r.json()['choices'][0]['message']['content']
 
-            response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            ai_data = response.json()
-            answer = ai_data["choices"][0]["message"]["content"]
-
-            st.markdown("### 🧭 SOPHIA’s Response:")
-            st.markdown(answer)
-
+            # Display the complete analysis
+            st.markdown("---")
+            st.markdown(plan)
+            
         except Exception as e:
-            st.error(f"Error getting SOPHIA’s response: {e}")
+            st.error(f"Error generating analysis: {e}")
 
-# ---------- FOOTER ----------
+# ---------- Q&A ----------
 st.markdown("---")
-st.caption("SOPHIA AI Fitness Coach • Built for operational readiness and data-informed performance improvement.")
+st.markdown("### 💬 Ask SOPHIA Anything")
+st.markdown("*Questions about goals, training science, adjustments, nutrition, recovery, etc.*")
+
+q = st.text_input("Your question:")
+if st.button("💡 Get Answer", use_container_width=True) and q:
+    with st.spinner("SOPHIA is thinking…"):
+        preferred_name = st.session_state.get('preferred_name', st.session_state.username)
+        q_prompt = f"""You are SOPHIA, speaking directly to {preferred_name}. Answer their question in a conversational way, like you're talking to them face-to-face.
+
+Their Question: {q}
+
+Context About Them:
+- {preferred_name}, 39M
+- Goal Date: {GOAL_DATE} ({days_to_goal} days away)
+- Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
+- Current Performance: Projected 2-mile is {proj_str} | Last session: {df['pushups'].iloc[0]} push-ups, {df['crunches'].iloc[0]} crunches
+- Trends: Pace {pace_trend:+.3f} min/mi, Push-ups {push_trend:+.1f}/session, Crunches {crunch_trend:+.1f}/session
+- Training: Last workout was {days_since_workout} days ago, next planned in {days_until_workout} days
+
+Respond in 4-6 sentences using "I" (as SOPHIA) and "you" (speaking to them). Reference exercise science naturally when relevant. Be direct, honest, and helpful - like a knowledgeable coach having a conversation."""
+
+        try:
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}",
+                       "Content-Type": "application/json"}
+            payload = {
+                "model": MODEL,
+                "messages": [{"role": "user", "content": q_prompt}],
+                "temperature": 0.6,
+                "max_tokens": 400
+            }
+            r = requests.post(GROQ_URL, headers=headers, json=payload, timeout=30)
+            r.raise_for_status()
+            reply = r.json()['choices'][0]['message']['content']
+            
+            st.markdown("#### SOPHIA's Response:")
+            st.info(reply)
+        except Exception as e:
+            st.error(f"Error: {e}")
