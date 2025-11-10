@@ -154,7 +154,7 @@ with colY:
 # ——— TABS ———
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
-# ——— TAB 1: PACE (FULL LEGEND) ———
+# ——— TAB 1: PACE (FULLY RESTORED) ———
 with tab1:
     fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (min/mi)")
     fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'],
