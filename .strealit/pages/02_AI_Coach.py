@@ -5,6 +5,19 @@ import psycopg2
 import requests
 from datetime import datetime, timedelta
 
+# ---------- DB ----------
+def get_db_connection():
+    return psycopg2.connect(st.secrets["POSTGRES_URL"])
+
+def get_logs():
+    conn = get_db_connection()
+    df = pd.read_sql_query(
+        "SELECT * FROM logs WHERE user_id = %s ORDER BY date DESC",
+        conn, params=(st.session_state.user_id,)
+    )
+    conn.close()
+    return df
+
 # ——— PAGE CONFIG ———
 st.set_page_config(
     page_title="SOPHIA Coach",
@@ -54,19 +67,6 @@ if st.sidebar.button("Logout", use_container_width=True):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.switch_page("app.py")
-
-# ---------- DB ----------
-def get_db_connection():
-    return psycopg2.connect(st.secrets["POSTGRES_URL"])
-
-def get_logs():
-    conn = get_db_connection()
-    df = pd.read_sql_query(
-        "SELECT * FROM logs WHERE user_id = %s ORDER BY date DESC",
-        conn, params=(st.session_state.user_id,)
-    )
-    conn.close()
-    return df
 
 df = get_logs()
 if df.empty:
