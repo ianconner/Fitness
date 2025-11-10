@@ -152,6 +152,7 @@ with colB:
 
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
+# ---------- TAB 1: PACE TREND ----------
 with tab1:
     # Create pace trend chart
     fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (per mile)")
@@ -175,7 +176,7 @@ with tab1:
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
-    # Create custom tick values and labels in MM:SS format
+    # Custom Y-Axis ticks
     y_min = valid_df['pace_min_per_mi'].min()
     y_max = valid_df['pace_min_per_mi'].max()
     y_range_min = int(y_min) - 1
@@ -188,7 +189,6 @@ with tab1:
         tick_vals.append(val)
         tick_labels.append(format_pace(val))
     
-    # Format y-axis to show MM:SS
     fig.update_yaxes(
         tickmode='array',
         tickvals=tick_vals,
@@ -196,14 +196,13 @@ with tab1:
         title="Pace (min:sec per mile)"
     )
     
-    # Custom hover to show MM:SS format
+    # Hover display
     fig.update_traces(
         hovertemplate='<b>Date:</b> %{x|%b %d}<br><b>Pace:</b> ' + 
                       valid_df['pace_display'] + '<extra></extra>',
         selector=dict(mode='markers')
     )
     
-    # Show only dates with actual data
     fig.update_xaxes(
         tickformat="%b %d",
         tickmode='array',
@@ -223,29 +222,21 @@ with tab1:
     )
     st.plotly_chart(fig, use_container_width=True)
 
+# ---------- TAB 2: PUSHUPS TREND ----------
 with tab2:
-    # Create push-ups chart
     fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
-    
-    # Add green line connecting the dots
     fig.add_scatter(x=df['date'], y=df['pushups'], 
                     mode='lines', line=dict(color='green', width=2),
                     name='Your Push-ups', showlegend=True)
-    
-    # Add yellow average line
     avg_pushups = df['pushups'].mean()
     fig.add_hline(y=avg_pushups, line_dash="solid", line_color="gold", 
                   line_width=2, annotation_text=f"Average: {avg_pushups:.0f}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='gold', width=2), name='Average', showlegend=True)
-    
-    # Add red dashed goal line
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", 
                   line_width=2, annotation_text=f"Goal: {GOAL_PUSH}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
-    
-    # Show only dates with actual data
     fig.update_xaxes(
         tickformat="%b %d",
         tickmode='array',
@@ -265,29 +256,21 @@ with tab2:
     )
     st.plotly_chart(fig, use_container_width=True)
 
+# ---------- TAB 3: CRUNCHES TREND ----------
 with tab3:
-    # Create crunches chart
     fig = px.scatter(df, x='date', y='crunches', title="Crunches")
-    
-    # Add green line connecting the dots
     fig.add_scatter(x=df['date'], y=df['crunches'], 
                     mode='lines', line=dict(color='green', width=2),
                     name='Your Crunches', showlegend=True)
-    
-    # Add yellow average line
     avg_crunches = df['crunches'].mean()
     fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
                   line_width=2, annotation_text=f"Average: {avg_crunches:.0f}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='gold', width=2), name='Average', showlegend=True)
-    
-    # Add red dashed goal line
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
                   line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
-    
-    # Show only dates with actual data
     fig.update_xaxes(
         tickformat="%b %d",
         tickmode='array',
