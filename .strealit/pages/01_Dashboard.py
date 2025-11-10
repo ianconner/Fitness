@@ -1,8 +1,39 @@
+# pages/01_Dashboard.py
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import psycopg2
-import requests
-from datetime import datetime, timedelta
+from datetime import datetime
+
+# ——— PAGE CONFIG ———
+st.set_page_config(
+    page_title="Dashboard - SOPHIA",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ——— HIDE STREAMLIT AUTO NAV ———
+st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {display: none !important;}
+    .block-container {padding-top: 2rem !important;}
+</style>
+""", unsafe_allow_html=True)
+
+# ——— CHECK LOGIN ———
+if 'logged_in' not in st.session_state or not st.session_state.logged_in:
+    st.error("Please log in from the home page.")
+    st.stop()
+
+# ——— SIDEBAR ———
+st.sidebar.success(f"**{st.session_state.username}**")
+st.sidebar.page_link("app.py", label="Home")
+st.sidebar.page_link("pages/01_Dashboard.py", label="Dashboard")
+st.sidebar.page_link("pages/02_AI_Coach.py", label="SOPHIA Coach")
+if st.sidebar.button("Logout", use_container_width=True):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # ——— DB ———
 def get_db_connection():
@@ -10,124 +41,68 @@ def get_db_connection():
 
 def get_logs():
     conn = get_db_connection()
-    df = pd.read_sql_query("SELECT * FROM logs WHERE user_id = %s ORDER BY date DESC", conn, params=(st.session_state.user_id,))
+    df = pd.read_sql_query(
+        "SELECT * FROM logs WHERE user_id = %s ORDER BY date",
+        conn, params=(st.session_state.user_id,)
+    )
     conn.close()
     return df
 
 df = get_logs()
 if df.empty:
-    st.warning("Log a session first.")
+    st.warning("No logs yet.")
     st.stop()
 
+# ——— PROCESS DATA ———
 df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
 
-# ——— GOALS ———
+# ——— GOALS FROM SESSION STATE ———
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
 GOAL_PUSH = st.session_state.get("goal_push", 45)
 GOAL_CRUNCH = st.session_state.get("goal_crunch", 45)
-GOAL_DATE = st.session_state.get("goal_date", datetime(2026, 6, 1).date())
 
-# ——— HORIZON ———
-today = datetime.today().date()
-days_to_goal = (GOAL_DATE - today).days
-if days_to_goal <= 30:
-    urgency = "MAX"; intensity = 1.3; volume = 0.7; progression = "aggressive taper"
-elif days_to_goal <= 90:
-    urgency = "HIGH"; intensity = 1.2; volume = 0.8; progression = "linear peaking"
-elif days_to_goal <= 180:
-    urgency = "MEDIUM"; intensity = 1.0; volume = 1.0; progression = "periodized"
-else:
-    urgency = "LOW"; intensity = 0.9; volume = 1.1; progression = "base building"
+# ——— TITLE ———
+st.markdown("## Progress Dashboard")
 
-# ——— DYNAMIC PROJECTION ———
-last_5 = valid_df.head(5)
-avg_pace = last_5['pace_min_per_mi'].mean()
-projected_2mi = avg_pace * 2
-projected_str = f"{int(projected_2mi):02d}:{int((projected_2mi % 1)*60):02d}"
+# ——— TABS ———
+tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
-# ——— NEXT SESSION ———
-weekday = today.weekday()
-days_ahead = (3 - weekday) % 7
-if days_ahead == 0: days_ahead = 7
-next_session = today + timedelta(days=days_ahead)
+# ——— TAB 1: PACE ———
+with tab1:
+    fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend")
+    fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'],
+                    mode='lines', line=dict(color='green', width=2), name='Trend')
+    avg_pace = valid_df['pace_min_per_mi'].mean()
+    fig.add_hline(y=avg_pace, line_dash="solid", line_color="gold", annotation_text=f"Avg: {avg_pace:.2f}")
+    goal_pace = GOAL_RUN_MIN / 2
+    fig.add_hline(y=goal_pace, line_dash="dash", line_color="red", annotation_text="Goal")
+    fig.update_xaxes(tickformat="%b %d")
+    fig.update_layout(showlegend=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# ——— GROQ ———
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.1-8b-instant"
+# ——— TAB 2: PUSH-UPS ———
+with tab2:
+    fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
+    fig.add_scatter(x=df['date'], y=df['pushups'],
+                    mode='lines', line=dict(color='green', width=2), name='Trend')
+    avg_push = df['pushups'].mean()
+    fig.add_hline(y=avg_push, line_dash="solid", line_color="gold", annotation_text=f"Avg: {avg_push:.0f}")
+    fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", annotation_text="Goal")
+    fig.update_xaxes(tickformat="%b %d")
+    fig.update_layout(showlegend=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# ——— SOPHIA PROMPT ———
-prompt = f"""You are **SOPHIA** — Smart Optimized Performance Health Intelligence Assistant.
-
-User: {st.session_state.username}, 39 y/o male.
-Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days)
-Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
-
-Today: {today}
-Next Session: {next_session.strftime('%A, %B %d')}
-Urgency: {urgency} | Progression: {progression}
-
---- DATA SNAPSHOT ---
-Last 5 avg pace: {avg_pace:.2f} min/mi → Projected 2-mile: {projected_str}
-Push-up trend: {df['pushups'].diff().mean():+.1f}/session
-
---- TODAY'S SESSION (Only) ---
-<50 min. Bodyweight. Include:
-- Warm-up (time + pace)
-- Main set (intervals/reps + rest)
-- Cooldown
-- RPE target
-
-Then:
-- 1-sentence 4-week microcycle
-- Science citation
-
-Tone: Clinical. Data-driven. Goal-date aware.
-"""
-
-if st.button("Get Today's SOPHIA Session"):
-    with st.spinner("SOPHIA is calibrating..."):
-        try:
-            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            data = {
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.5,
-                "max_tokens": 500
-            }
-            response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            plan = response.json()['choices'][0]['message']['content']
-            st.markdown("### SOPHIA — Smart Optimized Performance Health Intelligence Assistant")
-            st.write(plan)
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-# ——— TALK TO SOPHIA ———
-st.markdown("---")
-st.markdown("### Talk to SOPHIA")
-user_q = st.text_input("Ask about goals, science, adjustments...")
-if st.button("Send") and user_q:
-    with st.spinner("SOPHIA is thinking..."):
-        q_prompt = f"""SOPHIA answering: {user_q}
-
-Context: Goal date {GOAL_DATE}, 2-mile ≤ {GOAL_RUN_MIN}:00, {GOAL_PUSH} push-ups, {GOAL_CRUNCH} crunches.
-Current avg pace: {avg_pace:.2f} min/mi.
-3–5 sentences, cite science, be direct."""
-        try:
-            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            data = {
-                "model": MODEL,
-                "messages": [{"role": "user", "content": q_prompt}],
-                "temperature": 0.6,
-                "max_tokens": 300
-            }
-            response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
-            reply = response.json()['choices'][0]['message']['content']
-            st.markdown(f"**SOPHIA:** {reply}")
-        except Exception as e:
-            st.error(f"Error: {e}")
+# ——— TAB 3: CRUNCHES ———
+with tab3:
+    fig = px.scatter(df, x='date', y='crunches', title="Crunches")
+    fig.add_scatter(x=df['date'], y=df['crunches'],
+                    mode='lines', line=dict(color='green', width=2), name='Trend')
+    avg_crunch = df['crunches'].mean()
+    fig.add_hline(y=avg_crunch, line_dash="solid", line_color="gold", annotation_text=f"Avg: {avg_crunch:.0f}")
+    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", annotation_text="Goal")
+    fig.update_xaxes(tickformat="%b %d")
+    fig.update_layout(showlegend=True)
+    st.plotly_chart(fig, use_container_width=True)
