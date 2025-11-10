@@ -80,12 +80,14 @@ if not st.session_state.logged_in:
         if st.button("Login", use_container_width=True):
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT id FROM users WHERE username = %s AND password = %s", (login_user, login_pass))
+            # Case-insensitive username lookup
+            cur.execute("SELECT id, username FROM users WHERE LOWER(username) = LOWER(%s) AND password = %s", 
+                       (login_user, login_pass))
             user = cur.fetchone()
             if user:
                 st.session_state.logged_in = True
                 st.session_state.user_id = user[0]
-                st.session_state.username = login_user
+                st.session_state.username = user[1]  # Use actual username from DB (preserves original case)
                 st.success("Logged in!")
                 st.rerun()
             else:
@@ -101,9 +103,14 @@ if not st.session_state.logged_in:
             conn = get_db_connection()
             cur = conn.cursor()
             try:
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (new_user, new_pass))
-                conn.commit()
-                st.success("Account created!")
+                # Check if username already exists (case-insensitive)
+                cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(%s)", (new_user,))
+                if cur.fetchone():
+                    st.error("Username already taken (case-insensitive).")
+                else:
+                    cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (new_user, new_pass))
+                    conn.commit()
+                    st.success("Account created!")
             except psycopg2.IntegrityError:
                 st.error("Username taken.")
             cur.close()
