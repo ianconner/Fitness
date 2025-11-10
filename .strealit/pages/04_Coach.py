@@ -26,15 +26,18 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 # ——— SIDEBAR NAV ———
-st.sidebar.success(f"**{st.session_state.username}**")
-st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/01_Dashboard.py", label="Dashboard")
-st.sidebar.page_link("pages/02_AI_Coach.py", label="SOPHIA Coach")
-if st.sidebar.button("Logout", use_container_width=True):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
-
+with st.sidebar:
+    st.title("Navigation")
+    st.page_link("app.py", label="Home")
+    st.page_link("pages/01_Dashboard.py", label="Dashboard")
+    st.page_link("pages/02_Log_Run.py", label="Log a Run")
+    st.page_link("pages/04_Coach.py", label="Coach")
+    if st.session_state.role == 'admin':
+        st.page_link("pages/03_Admin.py", label="Admin")
+    if st.button("Logout"):
+        del st.session_state.user_id
+        del st.session_state.role
+        st.experimental_rerun()
 # ——— DB ———
 def get_db_connection():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
