@@ -67,10 +67,10 @@ valid_df = df[df['distance'] > 0].copy()
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
 GOAL_PUSH    = st.session_state.get("goal_push",    45)
 GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
-GOAL_DATE    = st.session_state.get("goal_date",    datetime(2026, 6, 1).date())
+GOAL_DATE    = st.session_state.get("goal_date",    datetime.now().date())
 
 # ---------- HORIZON ----------
-today = datetime.today().date()
+today = datetime.now().date()
 days_to_goal = (GOAL_DATE - today).days
 
 if days_to_goal <= 30:
