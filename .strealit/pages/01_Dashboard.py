@@ -15,10 +15,7 @@ st.set_page_config(
 # ——— HIDE STREAMLIT'S AUTO NAV ———
 st.markdown("""
 <style>
-    /* Hide Streamlit's default page navigation menu */
     [data-testid="stSidebarNav"] {display: none !important;}
-    
-    /* Reduce top padding */
     .block-container {padding-top: 2rem !important;}
 </style>
 """, unsafe_allow_html=True)
@@ -29,7 +26,7 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 # ——— SIDEBAR NAVIGATION ———
-st.sidebar.success(f"**{st.session_state.username}**")
+st.sidebar.success(f"**{st.session_state.get('preferred_name', st.session_state.username)}**")
 
 st.sidebar.page_link("app.py", label="🏠 Home")
 st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
@@ -58,7 +55,7 @@ if df.empty:
     st.warning("No logs yet.")
     st.stop()
 
-# Helper function to format pace as MM:SS
+# Helper functions
 def format_pace(minutes):
     """Convert decimal minutes to MM:SS format"""
     if pd.isna(minutes):
@@ -67,11 +64,6 @@ def format_pace(minutes):
     secs = int((minutes - mins) * 60)
     return f"{mins}:{secs:02d}"
 
-# Helper function to convert MM:SS to decimal for plotting
-def pace_to_decimal(minutes):
-    """Keep decimal format for calculations"""
-    return minutes
-
 df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
@@ -79,24 +71,61 @@ valid_df = df[df['distance'] > 0].copy()
 valid_df['cum_miles'] = valid_df['distance'].cumsum()
 valid_df['pace_display'] = valid_df['pace_min_per_mi'].apply(format_pace)
 
-# ---------- GOAL SETTINGS ----------
+# ---------- GOAL SETTINGS (Persistent) ----------
 st.sidebar.markdown("## Goal Settings")
-goal_run_min = st.sidebar.number_input("2-Mile Target (min)", value=18.0, step=0.1)
-goal_date   = st.sidebar.date_input("Target Date", value=datetime.now().date())
-goal_push   = st.sidebar.number_input("Push-ups", value=45, step=1)
-goal_crunch = st.sidebar.number_input("Crunches", value=45, step=1)
+
+def load_user_goals():
+    conn = psycopg2.connect(st.secrets["POSTGRES_URL"])
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT goal_run_min, goal_push, goal_crunch, goal_date
+        FROM users WHERE id = %s
+    """, (st.session_state.user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row and any(row):
+        return {
+            "goal_run_min": row[0] or 18.0,
+            "goal_push": row[1] or 45,
+            "goal_crunch": row[2] or 45,
+            "goal_date": row[3] or datetime.now().date()
+        }
+    return {"goal_run_min": 18.0, "goal_push": 45, "goal_crunch": 45, "goal_date": datetime.now().date()}
+
+if "goal_run_min" not in st.session_state:
+    saved = load_user_goals()
+    st.session_state.goal_run_min = saved["goal_run_min"]
+    st.session_state.goal_push = saved["goal_push"]
+    st.session_state.goal_crunch = saved["goal_crunch"]
+    st.session_state.goal_date = saved["goal_date"]
+
+goal_run_min = st.sidebar.number_input("2-Mile Target (min)", value=st.session_state.goal_run_min, step=0.1)
+goal_date    = st.sidebar.date_input("Target Date", value=st.session_state.goal_date)
+goal_push    = st.sidebar.number_input("Push-ups", value=st.session_state.goal_push, step=1)
+goal_crunch  = st.sidebar.number_input("Crunches", value=st.session_state.goal_crunch, step=1)
 
 if st.sidebar.button("Save Goals"):
-    st.session_state.goal_run_min = goal_run_min
-    st.session_state.goal_date   = goal_date
-    st.session_state.goal_push    = goal_push
-    st.session_state.goal_crunch  = goal_crunch
-    st.success("Goals saved!")
+    conn = psycopg2.connect(st.secrets["POSTGRES_URL"])
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE users SET goal_run_min = %s, goal_push = %s, goal_crunch = %s, goal_date = %s
+        WHERE id = %s
+    """, (goal_run_min, goal_push, goal_crunch, goal_date, st.session_state.user_id))
+    conn.commit()
+    cur.close()
+    conn.close()
 
-GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
-GOAL_DATE    = st.session_state.get("goal_date",   datetime.now().date())
-GOAL_PUSH    = st.session_state.get("goal_push",   45)
-GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
+    st.session_state.goal_run_min = goal_run_min
+    st.session_state.goal_push = goal_push
+    st.session_state.goal_crunch = goal_crunch
+    st.session_state.goal_date = goal_date
+    st.success("Goals saved and synced to your account!")
+
+GOAL_RUN_MIN = st.session_state.goal_run_min
+GOAL_DATE    = st.session_state.goal_date
+GOAL_PUSH    = st.session_state.goal_push
+GOAL_CRUNCH  = st.session_state.goal_crunch
 
 # ---------- PROJECTIONS ----------
 last_5 = valid_df.head(5)
@@ -112,7 +141,7 @@ col1, col2, col3 = st.columns(3)
 # ---- 2-Mile ----
 with col1:
     st.metric("Projected 2-Mile", proj_str,
-              f"Last {len(last_5)}: {avg_pace:.2f} min/mi")
+              f"Last {len(last_5)}: {avg_pace:.2f} min/mi" if pd.notna(avg_pace) else "")
     if pd.notna(proj_2mi) and proj_2mi <= GOAL_RUN_MIN:
         st.markdown("<div style='background:#4CAF50;height:8px;'></div>", unsafe_allow_html=True)
     elif pd.notna(proj_2mi) and proj_2mi <= 20:
@@ -154,29 +183,24 @@ tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
 # ---------- TAB 1: PACE TREND ----------
 with tab1:
-    # Create pace trend chart
     fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (per mile)")
-    
-    # Add green line connecting the dots
     fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'], 
                     mode='lines', line=dict(color='green', width=2),
                     name='Your Pace', showlegend=True)
     
-    # Add yellow average line
     avg_pace_all = valid_df['pace_min_per_mi'].mean()
     fig.add_hline(y=avg_pace_all, line_dash="solid", line_color="gold", 
                   line_width=2, annotation_text=f"Average: {format_pace(avg_pace_all)}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='gold', width=2), name='Average', showlegend=True)
     
-    # Add red dashed goal line
     goal_pace_per_mile = GOAL_RUN_MIN / 2
     fig.add_hline(y=goal_pace_per_mile, line_dash="dash", line_color="red", 
                   line_width=2, annotation_text=f"Goal: {format_pace(goal_pace_per_mile)}")
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
-    # Custom Y-Axis ticks
+    # Custom Y-axis ticks
     y_min = valid_df['pace_min_per_mi'].min()
     y_max = valid_df['pace_min_per_mi'].max()
     y_range_min = int(y_min) - 1
@@ -231,12 +255,8 @@ with tab2:
     avg_pushups = df['pushups'].mean()
     fig.add_hline(y=avg_pushups, line_dash="solid", line_color="gold", 
                   line_width=2, annotation_text=f"Average: {avg_pushups:.0f}")
-    fig.add_scatter(x=[None], y=[None], mode='lines', 
-                    line=dict(color='gold', width=2), name='Average', showlegend=True)
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", 
                   line_width=2, annotation_text=f"Goal: {GOAL_PUSH}")
-    fig.add_scatter(x=[None], y=[None], mode='lines', 
-                    line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     fig.update_xaxes(
         tickformat="%b %d",
         tickmode='array',
@@ -265,12 +285,8 @@ with tab3:
     avg_crunches = df['crunches'].mean()
     fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
                   line_width=2, annotation_text=f"Average: {avg_crunches:.0f}")
-    fig.add_scatter(x=[None], y=[None], mode='lines', 
-                    line=dict(color='gold', width=2), name='Average', showlegend=True)
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
                   line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}")
-    fig.add_scatter(x=[None], y=[None], mode='lines', 
-                    line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     fig.update_xaxes(
         tickformat="%b %d",
         tickmode='array',
