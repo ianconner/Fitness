@@ -3,12 +3,11 @@ import streamlit as st
 import psycopg2
 from datetime import datetime
 
-# ——— PAGE CONFIG: WIDE + NO CLIPPING ———
+# ——— PAGE CONFIG ———
 st.set_page_config(
     page_title="SOPHIA",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items=None
+    initial_sidebar_state="expanded"
 )
 
 # ——— HIDE STREAMLIT'S AUTO NAV ———
@@ -26,14 +25,18 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    # Add preferred_name column (safe to re-run)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE,
             password TEXT,
-            preferred_name TEXT
+            preferred_name TEXT,
+            goal_run_min FLOAT,
+            goal_push INT,
+            goal_crunch INT,
+            goal_date DATE
         );
+
         CREATE TABLE IF NOT EXISTS logs (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
@@ -45,7 +48,12 @@ def init_db():
             crunches INT,
             felt_rating INT
         );
+
         ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_name TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_run_min FLOAT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_push INT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_crunch INT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_date DATE;
     """)
     conn.commit()
     cur.close()
@@ -53,19 +61,19 @@ def init_db():
 
 init_db()
 
-# ——— SESSION ———
+# ——— SESSION INIT ———
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# ——— SIDEBAR WHEN LOGGED IN ———
+# ——— SIDEBAR (LOGGED IN) ———
 if st.session_state.get('logged_in', False):
     name_display = st.session_state.get("preferred_name", st.session_state.username)
     st.sidebar.success(f"**{name_display}**")
-    
+
     st.sidebar.page_link("app.py", label="🏠 Home")
     st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
     st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
-    
+
     if st.sidebar.button("Logout", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
@@ -75,10 +83,8 @@ if st.session_state.get('logged_in', False):
 if not st.session_state.logged_in:
     st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
     st.markdown(
-        "<h2 style='text-align: center; line-height: 1.2;'>"
-        "WELCOME TO SOPHIA<br>"
-        "<small style='color: #666;'>Smart Optimized Performance Health Intelligence Assistant</small>"
-        "</h2>",
+        "<h2 style='text-align: center;'>WELCOME TO SOPHIA<br>"
+        "<small style='color: #666;'>Smart Optimized Performance Health Intelligence Assistant</small></h2>",
         unsafe_allow_html=True
     )
 
@@ -89,23 +95,31 @@ if not st.session_state.logged_in:
         st.markdown("#### Login")
         login_user = st.text_input("Username", key="login_user")
         login_pass = st.text_input("Password", type="password", key="login_pass")
+
         if st.button("Login", use_container_width=True):
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT id, username, preferred_name FROM users WHERE LOWER(username) = LOWER(%s) AND password = %s", 
-                       (login_user, login_pass))
+            cur.execute("""
+                SELECT id, username, preferred_name, goal_run_min, goal_push, goal_crunch, goal_date
+                FROM users WHERE LOWER(username) = LOWER(%s) AND password = %s
+            """, (login_user, login_pass))
             user = cur.fetchone()
+            cur.close()
+            conn.close()
+
             if user:
                 st.session_state.logged_in = True
                 st.session_state.user_id = user[0]
                 st.session_state.username = user[1]
                 st.session_state.preferred_name = user[2] or user[1]
+                st.session_state.goal_run_min = user[3] or 18.0
+                st.session_state.goal_push = user[4] or 45
+                st.session_state.goal_crunch = user[5] or 45
+                st.session_state.goal_date = user[6] or datetime.now().date()
                 st.success("Logged in!")
                 st.rerun()
             else:
                 st.error("Invalid credentials.")
-            cur.close()
-            conn.close()
 
     # ----- SIGNUP -----
     with col2:
@@ -117,26 +131,22 @@ if not st.session_state.logged_in:
         if st.button("Create Account", use_container_width=True):
             conn = get_db_connection()
             cur = conn.cursor()
-            try:
-                cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(%s)", (new_user,))
-                if cur.fetchone():
-                    st.error("Username already taken (case-insensitive).")
-                else:
-                    cur.execute("""
-                        INSERT INTO users (username, password, preferred_name)
-                        VALUES (%s, %s, %s)
-                    """, (new_user, new_pass, new_name))
-                    conn.commit()
-                    st.success(f"Welcome, {new_name or new_user}! Your account has been created.")
-            except psycopg2.IntegrityError:
-                st.error("Username taken.")
-            finally:
-                cur.close()
-                conn.close()
-
+            cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(%s)", (new_user,))
+            exists = cur.fetchone()
+            if exists:
+                st.error("Username already taken.")
+            else:
+                cur.execute("""
+                    INSERT INTO users (username, password, preferred_name)
+                    VALUES (%s, %s, %s)
+                """, (new_user, new_pass, new_name))
+                conn.commit()
+                st.success(f"Welcome, {new_name or new_user}! Account created.")
+            cur.close()
+            conn.close()
     st.stop()
 
-# ——— HOME: LOG SESSION ———
+# ——— HOME PAGE: LOG SESSION ———
 st.markdown(f"### Log Session — {st.session_state.preferred_name}")
 
 with st.form("log_form"):
@@ -160,6 +170,6 @@ with st.form("log_form"):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (st.session_state.user_id, date, distance, run_min, run_sec, pushups, crunches, felt))
         conn.commit()
-        st.success("Logged!")
         cur.close()
         conn.close()
+        st.success("Logged!")
