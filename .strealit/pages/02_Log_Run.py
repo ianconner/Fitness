@@ -39,4 +39,4 @@ with st.sidebar:
     if st.button("Logout"):
         del st.session_state.user_id
         del st.session_state.role
-        st.experimental_rerun()
+        st.rerun()  # Fixed: Changed from st.experimental_rerun()
