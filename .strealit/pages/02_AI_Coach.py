@@ -42,22 +42,29 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 # ——— SIDEBAR NAVIGATION ———
-st.sidebar.success(f"**{st.session_state.username}**")
+st.sidebar.success(f"**{st.session_state.get('preferred_name', st.session_state.username)}**")
 
 # Preferred Name Setting
 with st.sidebar.expander("⚙️ Settings"):
     current_name = st.session_state.get('preferred_name', st.session_state.username)
     new_preferred_name = st.text_input("What should SOPHIA call you?", value=current_name, key="pref_name_input")
     if st.button("Save Name", key="save_pref_name"):
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET preferred_name = %s WHERE id = %s", 
-                   (new_preferred_name, st.session_state.user_id))
-        conn.commit()
-        cur.close()
-        conn.close()
-        st.session_state.preferred_name = new_preferred_name
-        st.success(f"SOPHIA will now call you {new_preferred_name}!")
+        # Validate session user id
+        if 'user_id' not in st.session_state or not st.session_state.user_id:
+            st.error("User ID not found in session. Please log in again.")
+            st.stop()
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET preferred_name = %s WHERE id = %s", 
+                       (new_preferred_name, st.session_state.user_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+            st.session_state.preferred_name = new_preferred_name
+            st.success(f"SOPHIA will now call you {new_preferred_name}!")
+        except Exception as e:
+            st.error(f"Failed to update name: {e}")
 
 st.sidebar.page_link("app.py", label="🏠 Home")
 st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
