@@ -1,141 +1,106 @@
-# app.py
 import streamlit as st
-import psycopg2
+import sqlite3
 from datetime import datetime
 
-# ——— PAGE CONFIG: WIDE + NO CLIPPING ———
-st.set_page_config(
-    page_title="SOPHIA",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items=None
-)
-
-# ——— HIDE STREAMLIT'S AUTO NAV ———
-st.markdown("""
-<style>
-    /* Hide Streamlit's default page navigation menu */
-    [data-testid="stSidebarNav"] {display: none !important;}
-    
-    /* Reduce top padding */
-    .block-container {padding-top: 2rem !important;}
-</style>
-""", unsafe_allow_html=True)
-
-# ——— DATABASE ———
-def get_db_connection():
-    return psycopg2.connect(st.secrets["POSTGRES_URL"])
-
+# Initialize the database
 def init_db():
-    conn = get_db_connection()
+    conn = sqlite3.connect('running_logs.db')
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE, password TEXT);
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            role TEXT DEFAULT 'user'
+        )
+    ''')
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS logs (
-            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
-            date DATE, distance FLOAT, run_minutes INT, run_seconds INT,
-            pushups INT, crunches INT, felt_rating INT
-        );
-        ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_id INTEGER;
-    """)
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            distance REAL NOT NULL,
+            time REAL NOT NULL,
+            pace REAL NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    # Add role column if it doesn't exist
+    cur.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cur.fetchall()]
+    if 'role' not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
     conn.commit()
-    cur.close()
     conn.close()
 
 init_db()
 
-# ——— SESSION ———
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+# Session state for logged-in user
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'role' not in st.session_state:
+    st.session_state.role = None
 
-# ——— SIDEBAR: ONLY SHOW WHEN LOGGED IN ———
-if st.session_state.get('logged_in', False):
-    st.sidebar.success(f"**{st.session_state.username}**")
-    
-    st.sidebar.page_link("app.py", label="🏠 Home")
-    st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
-    st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
-    
-    if st.sidebar.button("Logout", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
+# Sidebar for navigation (shown after login)
+def show_sidebar():
+    with st.sidebar:
+        st.title("Navigation")
+        st.page_link("app.py", label="Home")
+        st.page_link("pages/01_Dashboard.py", label="Dashboard")
+        st.page_link("pages/02_Log_Run.py", label="Log a Run")
+        st.page_link("pages/04_Coach.py", label="Coach")  # Assuming Coach is 04
+        if st.session_state.role == 'admin':
+            st.page_link("pages/03_Admin.py", label="Admin")
+        if st.button("Logout"):
+            del st.session_state.user_id
+            del st.session_state.role
+            st.experimental_rerun()  # Redirect to homepage
 
-# ——— LOGIN / SIGNUP ———
-if not st.session_state.logged_in:
-    st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-    st.markdown(
-        "<h2 style='text-align: center; line-height: 1.2;'>"
-        "WELCOME TO SOPHIA<br>"
-        "<small style='color: #666;'>Smart Optimized Performance Health Intelligence Assistant</small>"
-        "</h2>",
-        unsafe_allow_html=True
-    )
+# Main app
+st.title("Running Pace Dashboard")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Login")
+if st.session_state.user_id is None:
+    # Login/Signup form
+    tab1, tab2 = st.tabs(["Login", "Signup"])
+
+    with tab1:
+        st.subheader("Login")
         login_user = st.text_input("Username", key="login_user")
         login_pass = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login", use_container_width=True):
-            conn = get_db_connection()
+        if st.button("Login"):
+            conn = sqlite3.connect('running_logs.db')
             cur = conn.cursor()
-            cur.execute("SELECT id FROM users WHERE username = %s AND password = %s", (login_user, login_pass))
+            cur.execute("SELECT id, role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", (login_user, login_pass))
             user = cur.fetchone()
-            if user:
-                st.session_state.logged_in = True
-                st.session_state.user_id = user[0]
-                st.session_state.username = login_user
-                st.success("Logged in!")
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
-            cur.close()
             conn.close()
+            if user:
+                st.session_state.user_id = user[0]
+                st.session_state.role = user[1]
+                st.success("Logged in successfully!")
+                st.experimental_rerun()
+            else:
+                st.error("Invalid username or password")
 
-    with col2:
-        st.markdown("#### Signup")
+    with tab2:
+        st.subheader("Signup")
         new_user = st.text_input("New Username", key="new_user")
         new_pass = st.text_input("New Password", type="password", key="new_pass")
-        if st.button("Create Account", use_container_width=True):
-            conn = get_db_connection()
+        if st.button("Signup"):
+            conn = sqlite3.connect('running_logs.db')
             cur = conn.cursor()
             try:
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (new_user, new_pass))
-                conn.commit()
-                st.success("Account created!")
-            except psycopg2.IntegrityError:
-                st.error("Username taken.")
-            cur.close()
+                cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?)", (new_user,))
+                if cur.fetchone():
+                    st.error("Username already exists")
+                else:
+                    cur.execute("INSERT INTO users (username, password, created_at, role) VALUES (?, ?, ?, 'user')",
+                                (new_user, new_pass, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                    conn.commit()
+                    st.success("Account created! Please login.")
+            except sqlite3.IntegrityError:
+                st.error("Username already exists")
             conn.close()
-
-    st.stop()
-
-# ——— HOME: LOG SESSION ———
-st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-st.markdown(f"### Log Session — {st.session_state.username}")
-
-with st.form("log_form"):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        date = st.date_input("Date", value=datetime.today())
-        distance = st.number_input("Run (mi)", min_value=0.0, step=0.1)
-    with c2:
-        run_min = st.number_input("Min", min_value=0, step=1)
-        run_sec = st.number_input("Sec", min_value=0, max_value=59, step=1)
-    with c3:
-        pushups = st.number_input("Push-ups", min_value=0, step=1)
-        crunches = st.number_input("Crunches", min_value=0, step=1)
-    felt = st.slider("Felt (1–5)", 1, 5, 3)
-
-    if st.form_submit_button("Log Session", use_container_width=True):
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO logs (user_id, date, distance, run_minutes, run_seconds, pushups, crunches, felt_rating)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (st.session_state.user_id, date, distance, run_min, run_sec, pushups, crunches, felt))
-        conn.commit()
-        st.success("Logged!")
-        cur.close()
-        conn.close()
+else:
+    show_sidebar()
+    st.write(f"Welcome back, {st.session_state.user_id}!")  # Placeholder; can customize
