@@ -133,7 +133,7 @@ with col3:
                 "<div style='background:#F44336;height:8px;border-radius:2px;'></div>", unsafe_allow_html=True)
 
 # ——— SUMMARY METRICS ———
-st.markdown("---")
+st.markdown("——")
 st.subheader("Lifetime Totals")
 colA, colB, colC = st.columns(3)
 with colA:
@@ -143,7 +143,7 @@ with colB:
 with colC:
     st.metric("Total Crunches", f"{int(df['cum_crunches'].iloc[-1])}")
 
-st.markdown("---")
+st.markdown("——")
 st.subheader("Trends")
 colX, colY = st.columns(2)
 with colX:
@@ -154,19 +154,19 @@ with colY:
 # ——— TABS ———
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
-# ——— TAB 1: PACE (FULL RICH FEATURE) ———
+# ——— TAB 1: PACE (FULLY RESTORED) ———
 with tab1:
     fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (min/mi)")
     fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Your Pace', showlegend=True)
+                    name='Your Pace Trend Line', showlegend=True)
     avg_pace_val = valid_df['pace_min_per_mi'].mean()
     fig.add_hline(y=avg_pace_val, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Avg: {format_pace(avg_pace_val)}",
+                  line_width=2, annotation_text=f"Average Pace: {format_pace(avg_pace_val)}",
                   annotation_position="right")
     goal_pace = GOAL_RUN_MIN / 2
     fig.add_hline(y=goal_pace, line_dash="dash", line_color="red",
-                  line_width=2, annotation_text=f"Goal: {format_pace(goal_pace)}",
+                  line_width=2, annotation_text=f"Goal Pace: {format_pace(goal_pace)}",
                   annotation_position="right")
 
     # MM:SS Y-axis
@@ -174,7 +174,7 @@ with tab1:
     y_max = valid_df['pace_min_per_mi'].max()
     y_range_min = int(y_min) - 1
     y_range_max = int(y_max) + 2
-    tick_vals = [i/2 for i in range(y_range_min*2, y_range_max*2 + 1)]
+    tick_vals = [i/2 for i in range(y_range_min * 2, y_range_max * 2 + 1)]
     tick_labels = [format_pace(v) for v in tick_vals]
     fig.update_yaxes(tickmode='array', tickvals=tick_vals, ticktext=tick_labels,
                      title="Pace (min:sec per mile)")
@@ -189,18 +189,24 @@ with tab1:
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 2: PUSH-UPS (RICH) ———
+    # ——— LEGEND EXPLANATION ———
+    st.markdown("### Chart Legend")
+    st.markdown("""
+    - **Green line**: Your pace trend over time (connecting all sessions)
+    - **Yellow line**: Average pace across all runs
+    - **Red dashed line**: Goal pace (required for 18:00 2-mile)
+    - **Dots**: Individual sessions
+    """)
+
+# ——— TAB 2: PUSH-UPS ———
 with tab2:
     fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
     fig.add_scatter(x=df['date'], y=df['pushups'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Session', showlegend=True)
-    fig.add_scatter(x=df['date'], y=df['cum_pushups'],
-                    mode='lines', line=dict(color='purple', width=3),
-                    name='Cumulative', showlegend=True)
+                    name='Session Trend Line', showlegend=True)
     avg_push = df['pushups'].mean()
     fig.add_hline(y=avg_push, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Avg: {avg_push:.0f}",
+                  line_width=2, annotation_text=f"Average: {avg_push:.0f}",
                   annotation_position="right")
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red",
                   line_width=2, annotation_text=f"Goal: {GOAL_PUSH}",
@@ -210,18 +216,24 @@ with tab2:
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 3: CRUNCHES (RICH) ———
+    # ——— LEGEND EXPLANATION ———
+    st.markdown("### Chart Legend")
+    st.markdown("""
+    - **Green line**: Your push-up trend over time (connecting all sessions)
+    - **Yellow line**: Average push-ups per session
+    - **Red dashed line**: Goal push-ups (45 in 1 min)
+    - **Dots**: Individual sessions
+    """)
+
+# ——— TAB 3: CRUNCHES ———
 with tab3:
     fig = px.scatter(df, x='date', y='crunches', title="Crunches")
     fig.add_scatter(x=df['date'], y=df['crunches'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Session', showlegend=True)
-    fig.add_scatter(x=df['date'], y=df['cum_crunches'],
-                    mode='lines', line=dict(color='purple', width=3),
-                    name='Cumulative', showlegend=True)
+                    name='Session Trend Line', showlegend=True)
     avg_crunch = df['crunches'].mean()
     fig.add_hline(y=avg_crunch, line_dash="solid", line_color="gold",
-                  line_width=2, annotation_text=f"Avg: {avg_crunch:.0f}",
+                  line_width=2, annotation_text=f"Average: {avg_crunch:.0f}",
                   annotation_position="right")
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red",
                   line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}",
@@ -230,3 +242,12 @@ with tab3:
     fig.update_layout(showlegend=True,
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
+
+    # ——— LEGEND EXPLANATION ———
+    st.markdown("### Chart Legend")
+    st.markdown("""
+    - **Green line**: Your crunch trend over time (connecting all sessions)
+    - **Yellow line**: Average crunches per session
+    - **Red dashed line**: Goal crunches (45 in 2 min)
+    - **Dots**: Individual sessions
+    """)
