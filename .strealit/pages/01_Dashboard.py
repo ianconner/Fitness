@@ -38,7 +38,7 @@ st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
 if st.sidebar.button("Logout", use_container_width=True):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    st.rerun()
+    st.switch_page("app.py")
 
 # ---------- DB ----------
 def get_db_connection():
@@ -164,12 +164,16 @@ with tab1:
     # Add yellow average line
     avg_pace_all = valid_df['pace_min_per_mi'].mean()
     fig.add_hline(y=avg_pace_all, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
+                  line_width=2, annotation_text=f"Average: {format_pace(avg_pace_all)}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='gold', width=2), name='Average', showlegend=True)
     
     # Add red dashed goal line
     goal_pace_per_mile = GOAL_RUN_MIN / 2
     fig.add_hline(y=goal_pace_per_mile, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
+                  line_width=2, annotation_text=f"Goal: {format_pace(goal_pace_per_mile)}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
     # Create custom tick values and labels in MM:SS format
     y_min = valid_df['pace_min_per_mi'].min()
@@ -225,11 +229,15 @@ with tab2:
     # Add yellow average line
     avg_pushups = df['pushups'].mean()
     fig.add_hline(y=avg_pushups, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
+                  line_width=2, annotation_text=f"Average: {avg_pushups:.0f}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='gold', width=2), name='Average', showlegend=True)
     
     # Add red dashed goal line
     fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
+                  line_width=2, annotation_text=f"Goal: {GOAL_PUSH}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
     fig.update_xaxes(tickformat="%b %d")
     fig.update_layout(
@@ -257,11 +265,15 @@ with tab3:
     # Add yellow average line
     avg_crunches = df['crunches'].mean()
     fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
+                  line_width=2, annotation_text=f"Average: {avg_crunches:.0f}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='gold', width=2), name='Average', showlegend=True)
     
     # Add red dashed goal line
     fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
+                  line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}")
+    fig.add_scatter(x=[None], y=[None], mode='lines', 
+                    line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
     fig.update_xaxes(tickformat="%b %d")
     fig.update_layout(
