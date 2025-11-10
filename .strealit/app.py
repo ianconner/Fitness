@@ -125,7 +125,7 @@ st.markdown(f"### Log Session — {st.session_state.username}")
 with st.form("log_form"):
     c1, c2, c3 = st.columns(3)
     with c1:
-        date = st.date_input("Date", value=datetime.today())
+        date = st.date_input("Date", value=datetime.now())
         distance = st.number_input("Run (mi)", min_value=0.0, step=0.1)
     with c2:
         run_min = st.number_input("Min", min_value=0, step=1)
