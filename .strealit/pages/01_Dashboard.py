@@ -1,310 +1,133 @@
-with tab3:
-    # Create crunches chart
-    fig = px.scatter(df, x='date', y='crunches', title="Crunches")
-    
-    # Add green line connecting the dots
-    fig.add_scatter(x=df['date'], y=df['crunches'], 
-                    mode='lines', line=dict(color='green', width=2),
-                    name='Your Crunches', showlegend=True)
-    
-    # Add yellow average line
-    avg_crunches = df['crunches'].mean()
-    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
-    
-    # Add red dashed goal line
-    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
-    
-    fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
-    st.plotly_chart(fig, use_container_width=True)# pages/01_Dashboard.py
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import psycopg2
-from datetime import datetime
+import requests
+from datetime import datetime, timedelta
 
-# ——— PAGE CONFIG ———
-st.set_page_config(
-    page_title="Dashboard - SOPHIA",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ——— HIDE STREAMLIT'S AUTO NAV ———
-st.markdown("""
-<style>
-    /* Hide Streamlit's default page navigation menu */
-    [data-testid="stSidebarNav"] {display: none !important;}
-    
-    /* Reduce top padding */
-    .block-container {padding-top: 2rem !important;}
-</style>
-""", unsafe_allow_html=True)
-
-# ——— CHECK LOGIN ———
-if 'logged_in' not in st.session_state or not st.session_state.logged_in:
-    st.error("Please log in from the home page.")
-    st.stop()
-
-# ——— SIDEBAR NAVIGATION ———
-st.sidebar.success(f"**{st.session_state.username}**")
-
-st.sidebar.page_link("app.py", label="🏠 Home")
-st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
-st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
-
-if st.sidebar.button("Logout", use_container_width=True):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
-
-# ---------- DB ----------
+# ——— DB ———
 def get_db_connection():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
 def get_logs():
     conn = get_db_connection()
-    df = pd.read_sql_query(
-        "SELECT * FROM logs WHERE user_id = %s ORDER BY date",
-        conn, params=(st.session_state.user_id,)
-    )
+    df = pd.read_sql_query("SELECT * FROM logs WHERE user_id = %s ORDER BY date DESC", conn, params=(st.session_state.user_id,))
     conn.close()
     return df
 
 df = get_logs()
 if df.empty:
-    st.warning("No logs yet.")
+    st.warning("Log a session first.")
     st.stop()
-
-# Helper function to format pace as MM:SS
-def format_pace(minutes):
-    """Convert decimal minutes to MM:SS format"""
-    if pd.isna(minutes):
-        return "N/A"
-    mins = int(minutes)
-    secs = int((minutes - mins) * 60)
-    return f"{mins}:{secs:02d}"
-
-# Helper function to convert MM:SS to decimal for plotting
-def pace_to_decimal(minutes):
-    """Keep decimal format for calculations"""
-    return minutes
 
 df['date'] = pd.to_datetime(df['date'])
 df['run_time_min'] = df['run_minutes'] + df['run_seconds']/60
 df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
-valid_df['cum_miles'] = valid_df['distance'].cumsum()
-valid_df['pace_display'] = valid_df['pace_min_per_mi'].apply(format_pace)
 
-# ---------- GOAL SETTINGS ----------
-st.sidebar.markdown("## Goal Settings")
-goal_run_min = st.sidebar.number_input("2-Mile Target (min)", value=18.0, step=0.1)
-goal_date   = st.sidebar.date_input("Target Date", value=datetime(2026, 6, 1).date())
-goal_push   = st.sidebar.number_input("Push-ups", value=45, step=1)
-goal_crunch = st.sidebar.number_input("Crunches", value=45, step=1)
-
-if st.sidebar.button("Save Goals"):
-    st.session_state.goal_run_min = goal_run_min
-    st.session_state.goal_date   = goal_date
-    st.session_state.goal_push    = goal_push
-    st.session_state.goal_crunch  = goal_crunch
-    st.success("Goals saved!")
-
+# ——— GOALS ———
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
-GOAL_DATE    = st.session_state.get("goal_date",   datetime(2026, 6, 1).date())
-GOAL_PUSH    = st.session_state.get("goal_push",   45)
-GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
+GOAL_PUSH = st.session_state.get("goal_push", 45)
+GOAL_CRUNCH = st.session_state.get("goal_crunch", 45)
+GOAL_DATE = st.session_state.get("goal_date", datetime(2026, 6, 1).date())
 
-# ---------- PROJECTIONS ----------
+# ——— HORIZON ———
+today = datetime.today().date()
+days_to_goal = (GOAL_DATE - today).days
+if days_to_goal <= 30:
+    urgency = "MAX"; intensity = 1.3; volume = 0.7; progression = "aggressive taper"
+elif days_to_goal <= 90:
+    urgency = "HIGH"; intensity = 1.2; volume = 0.8; progression = "linear peaking"
+elif days_to_goal <= 180:
+    urgency = "MEDIUM"; intensity = 1.0; volume = 1.0; progression = "periodized"
+else:
+    urgency = "LOW"; intensity = 0.9; volume = 1.1; progression = "base building"
+
+# ——— DYNAMIC PROJECTION ———
 last_5 = valid_df.head(5)
-avg_pace = last_5['pace_min_per_mi'].mean() if not last_5.empty else pd.NA
-proj_2mi = avg_pace * 2 if pd.notna(avg_pace) else pd.NA
-proj_str = (f"{int(proj_2mi):02d}:{int((proj_2mi % 1)*60):02d}"
-            if pd.notna(proj_2mi) else "N/A")
+avg_pace = last_5['pace_min_per_mi'].mean()
+projected_2mi = avg_pace * 2
+projected_str = f"{int(projected_2mi):02d}:{int((projected_2mi % 1)*60):02d}"
 
-st.title("Progress Dashboard")
+# ——— NEXT SESSION ———
+weekday = today.weekday()
+days_ahead = (3 - weekday) % 7
+if days_ahead == 0: days_ahead = 7
+next_session = today + timedelta(days=days_ahead)
 
-col1, col2, col3 = st.columns(3)
+# ——— GROQ ———
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL = "llama-3.1-8b-instant"
 
-# ---- 2-Mile ----
-with col1:
-    st.metric("Projected 2-Mile", proj_str,
-              f"Last {len(last_5)}: {avg_pace:.2f} min/mi")
-    if pd.notna(proj_2mi) and proj_2mi <= GOAL_RUN_MIN:
-        st.markdown("<div style='background:#4CAF50;height:8px;'></div>", unsafe_allow_html=True)
-    elif pd.notna(proj_2mi) and proj_2mi <= 20:
-        st.markdown("<div style='background:#FFC107;height:8px;'></div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div style='background:#F44336;height:8px;'></div>", unsafe_allow_html=True)
+# ——— SOPHIA PROMPT ———
+prompt = f"""You are **SOPHIA** — Smart Optimized Performance Health Intelligence Assistant.
 
-# ---- Push-ups ----
-with col2:
-    latest_p = df['pushups'].iloc[-1]
-    delta_p  = latest_p - GOAL_PUSH
-    st.metric("Push-ups", latest_p,
-              f"{delta_p:+} vs goal" if delta_p != 0 else "Goal met")
-    st.markdown("<div style='background:#4CAF50;height:8px;'></div>"
-                if latest_p >= GOAL_PUSH else
-                "<div style='background:#F44336;height:8px;'></div>", unsafe_allow_html=True)
+User: {st.session_state.username}, 39 y/o male.
+Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days)
+Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
 
-# ---- Crunches ----
-with col3:
-    latest_c = df['crunches'].iloc[-1]
-    delta_c  = latest_c - GOAL_CRUNCH
-    st.metric("Crunches", latest_c,
-              f"{delta_c:+} vs goal" if delta_c != 0 else "Goal met")
-    st.markdown("<div style='background:#4CAF50;height:8px;'></div>"
-                if latest_c >= GOAL_CRUNCH else
-                "<div style='background:#F44336;height:8px;'></div>", unsafe_allow_html=True)
+Today: {today}
+Next Session: {next_session.strftime('%A, %B %d')}
+Urgency: {urgency} | Progression: {progression}
 
-# ---------- TRENDS ----------
+--- DATA SNAPSHOT ---
+Last 5 avg pace: {avg_pace:.2f} min/mi → Projected 2-mile: {projected_str}
+Push-up trend: {df['pushups'].diff().mean():+.1f}/session
+
+--- TODAY'S SESSION (Only) ---
+<50 min. Bodyweight. Include:
+- Warm-up (time + pace)
+- Main set (intervals/reps + rest)
+- Cooldown
+- RPE target
+
+Then:
+- 1-sentence 4-week microcycle
+- Science citation
+
+Tone: Clinical. Data-driven. Goal-date aware.
+"""
+
+if st.button("Get Today's SOPHIA Session"):
+    with st.spinner("SOPHIA is calibrating..."):
+        try:
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            data = {
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.5,
+                "max_tokens": 500
+            }
+            response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
+            response.raise_for_status()
+            plan = response.json()['choices'][0]['message']['content']
+            st.markdown("### SOPHIA — Smart Optimized Performance Health Intelligence Assistant")
+            st.write(plan)
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# ——— TALK TO SOPHIA ———
 st.markdown("---")
-st.subheader("Trends")
-colA, colB = st.columns(2)
-with colA:
-    st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
-with colB:
-    days_to_goal = (GOAL_DATE - datetime.today().date()).days
-    st.metric("Days to Goal", f"{days_to_goal}")
+st.markdown("### Talk to SOPHIA")
+user_q = st.text_input("Ask about goals, science, adjustments...")
+if st.button("Send") and user_q:
+    with st.spinner("SOPHIA is thinking..."):
+        q_prompt = f"""SOPHIA answering: {user_q}
 
-tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
-
-with tab1:
-    # Create pace trend chart
-    fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (per mile)")
-    
-    # Add green line connecting the dots
-    fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'], 
-                    mode='lines', line=dict(color='green', width=2),
-                    name='Your Pace', showlegend=True)
-    
-    # Add yellow average line
-    avg_pace_all = valid_df['pace_min_per_mi'].mean()
-    fig.add_hline(y=avg_pace_all, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
-    
-    # Add red dashed goal line
-    goal_pace_per_mile = GOAL_RUN_MIN / 2
-    fig.add_hline(y=goal_pace_per_mile, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
-    
-    # Create custom tick values and labels in MM:SS format
-    y_min = valid_df['pace_min_per_mi'].min()
-    y_max = valid_df['pace_min_per_mi'].max()
-    y_range_min = int(y_min) - 1
-    y_range_max = int(y_max) + 2
-    
-    tick_vals = []
-    tick_labels = []
-    for i in range(y_range_min * 2, y_range_max * 2 + 1):
-        val = i / 2.0
-        tick_vals.append(val)
-        tick_labels.append(format_pace(val))
-    
-    # Format y-axis to show MM:SS
-    fig.update_yaxes(
-        tickmode='array',
-        tickvals=tick_vals,
-        ticktext=tick_labels,
-        title="Pace (min:sec per mile)"
-    )
-    
-    # Custom hover to show MM:SS format
-    fig.update_traces(
-        hovertemplate='<b>Date:</b> %{x|%b %d}<br><b>Pace:</b> ' + 
-                      valid_df['pace_display'] + '<extra></extra>',
-        selector=dict(mode='markers')
-    )
-    
-    fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-with tab2:
-    # Create push-ups chart
-    fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
-    
-    # Add green line connecting the dots
-    fig.add_scatter(x=df['date'], y=df['pushups'], 
-                    mode='lines', line=dict(color='green', width=2),
-                    name='Your Push-ups', showlegend=True)
-    
-    # Add yellow average line
-    avg_pushups = df['pushups'].mean()
-    fig.add_hline(y=avg_pushups, line_dash="solid", line_color="gold", 
-                  line_width=2, name='Average')
-    
-    # Add red dashed goal line
-    fig.add_hline(y=GOAL_PUSH, line_dash="dash", line_color="red", 
-                  line_width=2, name='Goal')
-    
-    fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-with tab3:
-    # Create crunches chart
-    fig = px.scatter(df, x='date', y='crunches', title="Crunches")
-    
-    # Add green line connecting the dots
-    fig.add_scatter(x=df['date'], y=df['crunches'], 
-                    mode='lines', line=dict(color='green', width=2),
-                    name='Your Crunches', showlegend=True)
-    
-    # Add yellow average line
-    avg_crunches = df['crunches'].mean()
-    fig.add_hline(y=avg_crunches, line_dash="solid", line_color="yellow", 
-                  line_width=2, annotation_text=f"Avg: {avg_crunches:.0f}", 
-                  annotation_position="right")
-    
-    # Add red dashed goal line
-    fig.add_hline(y=GOAL_CRUNCH, line_dash="dash", line_color="red", 
-                  line_width=2, annotation_text=f"Goal: {GOAL_CRUNCH}", 
-                  annotation_position="right")
-    
-    fig.update_xaxes(tickformat="%b %d")
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title=dict(text="Legend")
-        )
-    )
-    st.plotly_chart(fig, use_container_width=True)
+Context: Goal date {GOAL_DATE}, 2-mile ≤ {GOAL_RUN_MIN}:00, {GOAL_PUSH} push-ups, {GOAL_CRUNCH} crunches.
+Current avg pace: {avg_pace:.2f} min/mi.
+3–5 sentences, cite science, be direct."""
+        try:
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            data = {
+                "model": MODEL,
+                "messages": [{"role": "user", "content": q_prompt}],
+                "temperature": 0.6,
+                "max_tokens": 300
+            }
+            response = requests.post(GROQ_URL, headers=headers, json=data, timeout=30)
+            response.raise_for_status()
+            reply = response.json()['choices'][0]['message']['content']
+            st.markdown(f"**SOPHIA:** {reply}")
+        except Exception as e:
+            st.error(f"Error: {e}")
