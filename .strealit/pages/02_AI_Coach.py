@@ -31,6 +31,21 @@ if 'logged_in' not in st.session_state or not st.session_state.logged_in:
 # ——— SIDEBAR NAVIGATION ———
 st.sidebar.success(f"**{st.session_state.username}**")
 
+# Preferred Name Setting
+with st.sidebar.expander("⚙️ Settings"):
+    current_name = st.session_state.get('preferred_name', st.session_state.username)
+    new_preferred_name = st.text_input("What should SOPHIA call you?", value=current_name, key="pref_name_input")
+    if st.button("Save Name", key="save_pref_name"):
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET preferred_name = %s WHERE id = %s", 
+                   (new_preferred_name, st.session_state.user_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        st.session_state.preferred_name = new_preferred_name
+        st.success(f"SOPHIA will now call you {new_preferred_name}!")
+
 st.sidebar.page_link("app.py", label="🏠 Home")
 st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
 st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
@@ -108,7 +123,8 @@ MODEL = "llama-3.1-8b-instant"
 
 # ---------- PAGE HEADER ----------
 st.markdown("### 🤖 SOPHIA – Smart Optimized Performance Health Intelligence Assistant")
-st.markdown(f"**Coaching {st.session_state.username}** | Goal Date: **{GOAL_DATE.strftime('%B %d, %Y')}** ({days_to_goal} days)")
+preferred_name = st.session_state.get('preferred_name', st.session_state.username)
+st.markdown(f"**Coaching {preferred_name}** | Goal Date: **{GOAL_DATE.strftime('%B %d, %Y')}** ({days_to_goal} days)")
 
 # ---------- USER INPUT: NEXT WORKOUT ----------
 st.markdown("---")
@@ -128,9 +144,10 @@ if st.button("🎯 Get SOPHIA's Complete Analysis & Workout Plan", use_container
     with st.spinner("SOPHIA is analyzing your data and creating your personalized plan..."):
         
         # Build comprehensive data context
+        preferred_name = st.session_state.get('preferred_name', st.session_state.username)
         data_summary = f"""
 === ATHLETE PROFILE ===
-Name: {st.session_state.username}
+Name: {preferred_name}
 Age: 39 years old, Male
 Goal Date: {GOAL_DATE.strftime('%B %d, %Y')} ({days_to_goal} days remaining)
 Training Urgency: {urgency}
@@ -171,7 +188,7 @@ Training Urgency: {urgency}
 
 {data_summary}
 
-Speak directly to {st.session_state.username} in first and second person (I/you), as if you're having a conversation. Be warm but professional. Structure your response with these sections:
+Speak directly to {preferred_name} in first and second person (I/you), as if you're having a conversation. Be warm but professional. Structure your response with these sections:
 
 1. **PERFORMANCE ANALYSIS**
    Talk directly about where you currently stand vs each goal. Use phrases like "You're currently at..." and "I see you've been..."
@@ -215,7 +232,7 @@ Speak directly to {st.session_state.username} in first and second person (I/you)
    - Reference exercise science naturally: "Your VO2max will adapt if we..."
    - Be honest but encouraging
 
-Tone: Like a knowledgeable coach talking to their athlete. Use "I" when referring to yourself as SOPHIA, "you/your" when referring to {st.session_state.username}. Be direct, honest, data-driven, but supportive. No third person references.
+Tone: Like a knowledgeable coach talking to their athlete. Use "I" when referring to yourself as SOPHIA, "you/your" when referring to {preferred_name}. Be direct, honest, data-driven, but supportive. No third person references.
 """
 
         try:
@@ -246,12 +263,13 @@ st.markdown("*Questions about goals, training science, adjustments, nutrition, r
 q = st.text_input("Your question:")
 if st.button("💡 Get Answer", use_container_width=True) and q:
     with st.spinner("SOPHIA is thinking…"):
-        q_prompt = f"""You are SOPHIA, speaking directly to {st.session_state.username}. Answer their question in a conversational way, like you're talking to them face-to-face.
+        preferred_name = st.session_state.get('preferred_name', st.session_state.username)
+        q_prompt = f"""You are SOPHIA, speaking directly to {preferred_name}. Answer their question in a conversational way, like you're talking to them face-to-face.
 
 Their Question: {q}
 
 Context About Them:
-- {st.session_state.username}, 39M
+- {preferred_name}, 39M
 - Goal Date: {GOAL_DATE} ({days_to_goal} days away)
 - Goals: 2-mile ≤ {GOAL_RUN_MIN}:00 | {GOAL_PUSH} push-ups | {GOAL_CRUNCH} crunches
 - Current Performance: Projected 2-mile is {proj_str} | Last session: {df['pushups'].iloc[0]} push-ups, {df['crunches'].iloc[0]} crunches
