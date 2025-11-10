@@ -203,7 +203,13 @@ with tab1:
         selector=dict(mode='markers')
     )
     
-    fig.update_xaxes(tickformat="%b %d")
+    # Show only dates with actual data
+    fig.update_xaxes(
+        tickformat="%b %d",
+        tickmode='array',
+        tickvals=valid_df['date'].unique(),
+        ticktext=[d.strftime("%b %d") for d in valid_df['date'].unique()]
+    )
     fig.update_layout(
         showlegend=True,
         legend=dict(
@@ -239,7 +245,13 @@ with tab2:
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
-    fig.update_xaxes(tickformat="%b %d")
+    # Show only dates with actual data
+    fig.update_xaxes(
+        tickformat="%b %d",
+        tickmode='array',
+        tickvals=df['date'].unique(),
+        ticktext=[d.strftime("%b %d") for d in df['date'].unique()]
+    )
     fig.update_layout(
         showlegend=True,
         legend=dict(
@@ -275,7 +287,13 @@ with tab3:
     fig.add_scatter(x=[None], y=[None], mode='lines', 
                     line=dict(color='red', width=2, dash='dash'), name='Goal', showlegend=True)
     
-    fig.update_xaxes(tickformat="%b %d")
+    # Show only dates with actual data
+    fig.update_xaxes(
+        tickformat="%b %d",
+        tickmode='array',
+        tickvals=df['date'].unique(),
+        ticktext=[d.strftime("%b %d") for d in df['date'].unique()]
+    )
     fig.update_layout(
         showlegend=True,
         legend=dict(
