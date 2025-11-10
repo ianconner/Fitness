@@ -1,4 +1,4 @@
-# pages/2_🤖_AI_Coach.py
+# pages/04_Coach.py
 import streamlit as st
 import pandas as pd
 import psycopg2
@@ -37,7 +37,8 @@ with st.sidebar:
     if st.button("Logout"):
         del st.session_state.user_id
         del st.session_state.role
-        st.experimental_rerun()
+        st.rerun()  # Fixed: Changed from st.experimental_rerun()
+
 # ——— DB ———
 def get_db_connection():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
