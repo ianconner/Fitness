@@ -38,22 +38,22 @@ if st.sidebar.button("Logout", use_container_width=True):
 # ——— GOAL SETTINGS (SIDEBAR) ———
 st.sidebar.markdown("## Goal Settings")
 goal_run_min = st.sidebar.number_input("2-Mile Target (min)", value=st.session_state.get("goal_run_min", 18.0), step=0.1)
-goal_date   = st.sidebar.date_input("Target Date", value=st.session_state.get("goal_date", datetime(2026, 6, 1).date()))
-goal_push   = st.sidebar.number_input("Push-ups", value=st.session_state.get("goal_push", 45), step=1)
+goal_date = st.sidebar.date_input("Target Date", value=st.session_state.get("goal_date", datetime(2026, 6, 1).date()))
+goal_push = st.sidebar.number_input("Push-ups", value=st.session_state.get("goal_push", 45), step=1)
 goal_crunch = st.sidebar.number_input("Crunches", value=st.session_state.get("goal_crunch", 45), step=1)
 
 if st.sidebar.button("Save Goals"):
     st.session_state.goal_run_min = goal_run_min
-    st.session_state.goal_date   = goal_date
-    st.session_state.goal_push    = goal_push
-    st.session_state.goal_crunch  = goal_crunch
+    st.session_state.goal_date = goal_date
+    st.session_state.goal_push = goal_push
+    st.session_state.goal_crunch = goal_crunch
     st.success("Goals saved!")
 
 # Use saved goals
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
-GOAL_DATE    = st.session_state.get("goal_date",   datetime(2026, 6, 1).date())
-GOAL_PUSH    = st.session_state.get("goal_push",   45)
-GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
+GOAL_DATE = st.session_state.get("goal_date", datetime(2026, 6, 1).date())
+GOAL_PUSH = st.session_state.get("goal_push", 45)
+GOAL_CRUNCH = st.session_state.get("goal_crunch", 45)
 
 # ——— DB ———
 def get_db_connection():
@@ -80,9 +80,14 @@ df['pace_min_per_mi'] = df['run_time_min'] / df['distance'].replace(0, pd.NA)
 valid_df = df[df['distance'] > 0].copy()
 valid_df['cum_miles'] = valid_df['distance'].cumsum()
 
-# Helper: MM:SS
+# Cumulative push-ups and crunches
+df['cum_pushups'] = df['pushups'].cumsum()
+df['cum_crunches'] = df['crunches'].cumsum()
+
+# Helper: MM:SS format
 def format_pace(minutes):
-    if pd.isna(minutes): return "N/A"
+    if pd.isna(minutes):
+        return "N/A"
     mins = int(minutes)
     secs = int((minutes - mins) * 60)
     return f"{mins}:{secs:02d}"
@@ -105,42 +110,53 @@ with col1:
               f"Last {len(last_5)}: {avg_pace:.2f} min/mi" if pd.notna(avg_pace) else "N/A")
     if pd.notna(proj_2mi):
         color = "#4CAF50" if proj_2mi <= GOAL_RUN_MIN else "#FFC107" if proj_2mi <= 20 else "#F44336"
-        st.markdown(f"<div style='background:{color};height:8px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:{color};height:8px;border-radius:2px;'></div>", unsafe_allow_html=True)
 
 with col2:
     latest_p = df['pushups'].iloc[-1]
+    total_p = df['cum_pushups'].iloc[-1]
     delta_p = latest_p - GOAL_PUSH
     st.metric("Push-ups", latest_p,
-              f"{delta_p:+} vs goal" if delta_p != 0 else "Goal met")
-    st.markdown("<div style='background:#4CAF50;height:8px;'></div>"
+              f"{delta_p:+} vs goal | Cum: {int(total_p)}")
+    st.markdown("<div style='background:#4CAF50;height:8px;border-radius:2px;'></div>"
                 if latest_p >= GOAL_PUSH else
-                "<div style='background:#F44336;height:8px;'></div>", unsafe_allow_html=True)
+                "<div style='background:#F44336;height:8px;border-radius:2px;'></div>", unsafe_allow_html=True)
 
 with col3:
     latest_c = df['crunches'].iloc[-1]
+    total_c = df['cum_crunches'].iloc[-1]
     delta_c = latest_c - GOAL_CRUNCH
     st.metric("Crunches", latest_c,
-              f"{delta_c:+} vs goal" if delta_c != 0 else "Goal met")
-    st.markdown("<div style='background:#4CAF50;height:8px;'></div>"
+              f"{delta_c:+} vs goal | Cum: {int(total_c)}")
+    st.markdown("<div style='background:#4CAF50;height:8px;border-radius:2px;'></div>"
                 if latest_c >= GOAL_CRUNCH else
-                "<div style='background:#F44336;height:8px;'></div>", unsafe_allow_html=True)
+                "<div style='background:#F44336;height:8px;border-radius:2px;'></div>", unsafe_allow_html=True)
 
 # ——— SUMMARY METRICS ———
 st.markdown("---")
-st.subheader("Trends")
-colA, colB = st.columns(2)
+st.subheader("Lifetime Totals")
+colA, colB, colC = st.columns(3)
 with colA:
     st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
 with colB:
-    days_to_goal = (GOAL_DATE - datetime.today().date()).days
-    st.metric("Days to Goal", f"{days_to_goal}")
+    st.metric("Total Push-ups", f"{int(df['cum_pushups'].iloc[-1])}")
+with colC:
+    st.metric("Total Crunches", f"{int(df['cum_crunches'].iloc[-1])}")
+
+st.markdown("---")
+st.subheader("Trends")
+colX, colY = st.columns(2)
+with colX:
+    st.metric("Days to Goal", f"{(GOAL_DATE - datetime.today().date()).days}")
+with colY:
+    st.write("")  # spacer
 
 # ——— TABS ———
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
 
-# ——— TAB 1: PACE (RICH) ———
+# ——— TAB 1: PACE (FULL RICH FEATURE) ———
 with tab1:
-    fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend")
+    fig = px.scatter(valid_df, x='date', y='pace_min_per_mi', title="Pace Trend (min/mi)")
     fig.add_scatter(x=valid_df['date'], y=valid_df['pace_min_per_mi'],
                     mode='lines', line=dict(color='green', width=2),
                     name='Your Pace', showlegend=True)
@@ -163,7 +179,7 @@ with tab1:
     fig.update_yaxes(tickmode='array', tickvals=tick_vals, ticktext=tick_labels,
                      title="Pace (min:sec per mile)")
 
-    # Hover
+    # Custom hover
     fig.update_traces(
         hovertemplate='<b>Date:</b> %{x|%b %d}<br><b>Pace:</b> %{customdata[0]}<extra></extra>',
         customdata=valid_df[['pace_display']].values
@@ -173,12 +189,15 @@ with tab1:
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 2: PUSH-UPS ———
+# ——— TAB 2: PUSH-UPS (RICH) ———
 with tab2:
     fig = px.scatter(df, x='date', y='pushups', title="Push-ups")
     fig.add_scatter(x=df['date'], y=df['pushups'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Your Push-ups', showlegend=True)
+                    name='Session', showlegend=True)
+    fig.add_scatter(x=df['date'], y=df['cum_pushups'],
+                    mode='lines', line=dict(color='purple', width=3),
+                    name='Cumulative', showlegend=True)
     avg_push = df['pushups'].mean()
     fig.add_hline(y=avg_push, line_dash="solid", line_color="gold",
                   line_width=2, annotation_text=f"Avg: {avg_push:.0f}",
@@ -191,12 +210,15 @@ with tab2:
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-# ——— TAB 3: CRUNCHES ———
+# ——— TAB 3: CRUNCHES (RICH) ———
 with tab3:
     fig = px.scatter(df, x='date', y='crunches', title="Crunches")
     fig.add_scatter(x=df['date'], y=df['crunches'],
                     mode='lines', line=dict(color='green', width=2),
-                    name='Your Crunches', showlegend=True)
+                    name='Session', showlegend=True)
+    fig.add_scatter(x=df['date'], y=df['cum_crunches'],
+                    mode='lines', line=dict(color='purple', width=3),
+                    name='Cumulative', showlegend=True)
     avg_crunch = df['crunches'].mean()
     fig.add_hline(y=avg_crunch, line_dash="solid", line_color="gold",
                   line_width=2, annotation_text=f"Avg: {avg_crunch:.0f}",
