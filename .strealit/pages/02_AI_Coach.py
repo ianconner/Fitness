@@ -124,7 +124,7 @@ with col2:
     st.metric("Days Until Workout", days_until_workout)
 
 # ---------- GENERATE ANALYSIS ----------
-if st.button("🎯 Get SOPHIA's Complete Analysis & Workout Plan", use_container_width=True, type="primary"):
+if st.button("🎯 Get SOPHIA's Complete Analysis & Workout Plan", use_container_width=True):
     with st.spinner("SOPHIA is analyzing your data and creating your personalized plan..."):
         
         # Build comprehensive data context
