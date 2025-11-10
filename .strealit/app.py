@@ -27,23 +27,13 @@ def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE,
-            password TEXT,
-            preferred_name TEXT
-        );
+        CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE, password TEXT);
         CREATE TABLE IF NOT EXISTS logs (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
-            date DATE,
-            distance FLOAT,
-            run_minutes INT,
-            run_seconds INT,
-            pushups INT,
-            crunches INT,
-            felt_rating INT
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
+            date DATE, distance FLOAT, run_minutes INT, run_seconds INT,
+            pushups INT, crunches INT, felt_rating INT
         );
+        ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_id INTEGER;
     """)
     conn.commit()
     cur.close()
@@ -55,14 +45,14 @@ init_db()
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# ——— SIDEBAR ———
+# ——— SIDEBAR: ONLY SHOW WHEN LOGGED IN ———
 if st.session_state.get('logged_in', False):
     st.sidebar.success(f"**{st.session_state.username}**")
-
+    
     st.sidebar.page_link("app.py", label="🏠 Home")
     st.sidebar.page_link("pages/01_Dashboard.py", label="📊 Dashboard")
     st.sidebar.page_link("pages/02_AI_Coach.py", label="🤖 SOPHIA Coach")
-
+    
     if st.sidebar.button("Logout", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
@@ -80,8 +70,6 @@ if not st.session_state.logged_in:
     )
 
     col1, col2 = st.columns(2)
-
-    # Login form
     with col1:
         st.markdown("#### Login")
         login_user = st.text_input("Username", key="login_user")
@@ -89,8 +77,8 @@ if not st.session_state.logged_in:
         if st.button("Login", use_container_width=True):
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT id, username FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
-                        (login_user, login_pass))
+            cur.execute("SELECT id, username FROM users WHERE LOWER(username) = LOWER(%s) AND password = %s", 
+                       (login_user, login_pass))
             user = cur.fetchone()
             if user:
                 st.session_state.logged_in = True
@@ -103,7 +91,6 @@ if not st.session_state.logged_in:
             cur.close()
             conn.close()
 
-    # Signup form
     with col2:
         st.markdown("#### Signup")
         new_user = st.text_input("New Username", key="new_user")
@@ -112,7 +99,7 @@ if not st.session_state.logged_in:
             conn = get_db_connection()
             cur = conn.cursor()
             try:
-                cur.execute("SELECT id FROM users WHERE LOWER(username)=LOWER(%s)", (new_user,))
+                cur.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(%s)", (new_user,))
                 if cur.fetchone():
                     st.error("Username already taken (case-insensitive).")
                 else:
@@ -126,8 +113,9 @@ if not st.session_state.logged_in:
 
     st.stop()
 
-# ——— HOME PAGE ———
+# ——— HOME: LOG SESSION ———
 st.markdown(f"### Log Session — {st.session_state.username}")
+
 with st.form("log_form"):
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -149,6 +137,6 @@ with st.form("log_form"):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (st.session_state.user_id, date, distance, run_min, run_sec, pushups, crunches, felt))
         conn.commit()
+        st.success("Logged!")
         cur.close()
         conn.close()
-        st.success("Logged!")
