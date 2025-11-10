@@ -82,7 +82,7 @@ valid_df['pace_display'] = valid_df['pace_min_per_mi'].apply(format_pace)
 # ---------- GOAL SETTINGS ----------
 st.sidebar.markdown("## Goal Settings")
 goal_run_min = st.sidebar.number_input("2-Mile Target (min)", value=18.0, step=0.1)
-goal_date   = st.sidebar.date_input("Target Date", value=datetime(2026, 6, 1).date())
+goal_date   = st.sidebar.date_input("Target Date", value=datetime.now().date())
 goal_push   = st.sidebar.number_input("Push-ups", value=45, step=1)
 goal_crunch = st.sidebar.number_input("Crunches", value=45, step=1)
 
@@ -94,7 +94,7 @@ if st.sidebar.button("Save Goals"):
     st.success("Goals saved!")
 
 GOAL_RUN_MIN = st.session_state.get("goal_run_min", 18.0)
-GOAL_DATE    = st.session_state.get("goal_date",   datetime(2026, 6, 1).date())
+GOAL_DATE    = st.session_state.get("goal_date",   datetime.now().date())
 GOAL_PUSH    = st.session_state.get("goal_push",   45)
 GOAL_CRUNCH  = st.session_state.get("goal_crunch", 45)
 
@@ -147,7 +147,7 @@ colA, colB = st.columns(2)
 with colA:
     st.metric("Total Miles", f"{valid_df['cum_miles'].iloc[-1]:.1f}")
 with colB:
-    days_to_goal = (GOAL_DATE - datetime.today().date()).days
+    days_to_goal = (GOAL_DATE - datetime.now().date()).days
     st.metric("Days to Goal", f"{days_to_goal}")
 
 tab1, tab2, tab3 = st.tabs(["Pace", "Push-ups", "Crunches"])
