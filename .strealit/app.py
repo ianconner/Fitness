@@ -49,13 +49,13 @@ def show_sidebar():
         st.page_link("app.py", label="Home")
         st.page_link("pages/01_Dashboard.py", label="Dashboard")
         st.page_link("pages/02_Log_Run.py", label="Log a Run")
-        st.page_link("pages/04_Coach.py", label="Coach")  # Assuming Coach is 04
+        st.page_link("pages/04_Coach.py", label="Coach")
         if st.session_state.role == 'admin':
             st.page_link("pages/03_Admin.py", label="Admin")
         if st.button("Logout"):
             del st.session_state.user_id
             del st.session_state.role
-            st.experimental_rerun()  # Redirect to homepage
+            st.rerun()  # Fixed: Changed from st.experimental_rerun()
 
 # Main app
 st.title("Running Pace Dashboard")
@@ -78,7 +78,7 @@ if st.session_state.user_id is None:
                 st.session_state.user_id = user[0]
                 st.session_state.role = user[1]
                 st.success("Logged in successfully!")
-                st.experimental_rerun()
+                st.rerun()  # Fixed: Changed from st.experimental_rerun()
             else:
                 st.error("Invalid username or password")
 
@@ -103,4 +103,4 @@ if st.session_state.user_id is None:
             conn.close()
 else:
     show_sidebar()
-    st.write(f"Welcome back, {st.session_state.user_id}!")  # Placeholder; can customize
+    st.write(f"Welcome back, {st.session_state.user_id}!")
