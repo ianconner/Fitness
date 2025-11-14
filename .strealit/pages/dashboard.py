@@ -69,8 +69,17 @@ def main():
 
     if not df_goals.empty:
         st.subheader("Active Goals")
-        df_goals["Days Left"] = (df_goals["target_date"] - date.today()).dt.days
+        
+        # === FIX ===
+        # Convert target_date to datetime objects before using .dt accessor
+        df_goals["target_date"] = pd.to_datetime(df_goals["target_date"])
+        # Use pd.Timestamp for compatible subtraction
+        df_goals["Days Left"] = (df_goals["target_date"] - pd.Timestamp(date.today())).dt.days
+        # === END FIX ===
+        
         df_goals["Status"] = df_goals["Days Left"].apply(lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue")
         st.dataframe(df_goals[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Status"]], use_container_width=True, hide_index=True)
     else:
         st.info("No active goals.")
+
+}
