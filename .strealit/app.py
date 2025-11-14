@@ -1,43 +1,32 @@
 # app.py
 import streamlit as st
 import psycopg2
+import os
 
 # ——— DATABASE CONNECTION ———
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE (ADD ROLE COLUMN IF MISSING) ———
+# ——— FORCE RECREATE DATABASE (EVERY START) ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
     
-    # Add 'role' column if it doesn't exist
-    cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                          WHERE table_name = 'users' AND column_name = 'role') THEN
-                ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
-            END IF;
-        END $$;
-    """)
-    
-    # Ensure all users have role
-    cur.execute("UPDATE users SET role = 'user' WHERE role IS NULL")
-    
-    # Load schema.sql for other tables
-    try:
-        with open("schema.sql", "r") as f:
-            cur.execute(f.read())
-    except:
-        pass  # schema.sql might not exist yet
+    # Read and execute schema.sql
+    schema_path = "schema.sql"
+    if os.path.exists(schema_path):
+        with open(schema_path, "r") as f:
+            sql = f.read()
+            cur.execute(sql)
+        st.success("Database schema loaded from schema.sql")
+    else:
+        st.error("schema.sql not found!")
     
     conn.commit()
     conn.close()
 
-# ——— FORCE RECREATE DATABASE ———
-init_db()  # Always run — drops and recreates tables
-st.success("Database initialized!")
+# ——— RUN INIT_DB ON EVERY LOAD ———
+init_db()  # This runs every time the app starts
 
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role']:
@@ -125,7 +114,7 @@ else:
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
 
-    # ——— ADMIN PROMOTION BUTTON (FOR YOU ONLY) ———
+    # ——— ADMIN PROMOTION BUTTON ———
     if st.session_state.username == "ianconner":  # CHANGE TO YOUR USERNAME
         st.sidebar.markdown("---")
         st.sidebar.markdown("### DEV MODE")
