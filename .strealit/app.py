@@ -48,7 +48,7 @@ if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["Login", "Signup"])
+       tab1, tab2 = st.tabs(["Login", "Signup"])
 
     with tab1:
         with st.form("login_form"):
@@ -58,7 +58,7 @@ if not st.session_state.logged_in:
             login_btn = st.form_submit_button("Login")
             if login_btn:
                 if not username or not password:
-                    st.error("Please enter both fields.")
+                    st.error("Please fill in both fields.")
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
@@ -77,15 +77,16 @@ if not st.session_state.logged_in:
                         st.rerun()
                     else:
                         st.error("Invalid username or password")
+
     with tab2:
         with st.form("signup_form"):
             st.write("### Create Account")
-            new_user = st.text_input("Choose Username")
-            new_pass = st.text_input("Choose Password", type="password")
+            new_user = st.text_input("Choose Username", key="signup_user")
+            new_pass = st.text_input("Choose Password", type="password", key="signup_pass")
             signup_btn = st.form_submit_button("Signup")
             if signup_btn:
                 if not new_user or not new_pass:
-                    st.error("Fill in both fields")
+                    st.error("Please fill in both fields.")
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
@@ -94,17 +95,13 @@ if not st.session_state.logged_in:
                             "INSERT INTO users (username, password) VALUES (%s, %s) RETURNING id, username",
                             (new_user, new_pass)
                         )
-                        uid, uname = cur.fetchone()
+                        user = cur.fetchone()
                         conn.commit()
-                        st.success(f"Account created for **{uname}**! Please log in.")
+                        st.success(f"Account created for **{user[1]}**! Please log in.")
                     except psycopg2.IntegrityError:
-                        st.error("Username already taken")
-                    conn.close()
-
-else:
-    sidebar()
-    st.markdown(f"## Welcome, **{st.session_state.username}**")
-    st.info("Use the sidebar to navigate.")
+                        st.error("Username already taken.")
+                    finally:
+                        conn.close()
 
 # ——— TEMPORARY ADMIN SETUP (REMOVE AFTER USE) ———
 if st.secrets.get("ADMIN_SETUP") == "true":
