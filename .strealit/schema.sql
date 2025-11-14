@@ -1,19 +1,23 @@
 -- schema.sql
--- Add role column if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
-        ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
-    END IF;
-END $$;
+-- DROP AND RECREATE EVERYTHING SAFELY
 
--- Ensure all existing users have role = 'user'
-UPDATE users SET role = 'user' WHERE role IS NULL;
+-- Drop tables in correct order
+DROP TABLE IF EXISTS workout_exercises CASCADE;
+DROP TABLE IF EXISTS workouts CASCADE;
+DROP TABLE IF EXISTS goals CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
--- Rest of schema (safe to re-run)
-DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
+-- Create users with role
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
-CREATE TABLE IF NOT EXISTS goals (
+-- Create goals
+CREATE TABLE goals (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     exercise TEXT NOT NULL,
@@ -23,7 +27,8 @@ CREATE TABLE IF NOT EXISTS goals (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS workouts (
+-- Create workouts
+CREATE TABLE workouts (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     workout_date DATE NOT NULL,
@@ -32,7 +37,8 @@ CREATE TABLE IF NOT EXISTS workouts (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS workout_exercises (
+-- Create workout_exercises
+CREATE TABLE workout_exercises (
     id SERIAL PRIMARY KEY,
     workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
     exercise TEXT NOT NULL,
