@@ -7,48 +7,40 @@ import pandas as pd
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— USER-SPECIFIC CACHE ———
-@st.cache_data(ttl=60)
-def fetch_goals(user_id: int):
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
-            (user_id,)
-        )
-        rows = cur.fetchall()
-        return pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
-    finally:
-        conn.close()
-
-# ——— CLEAR CACHE ———
-def clear_goals_cache():
-    st.cache_data.clear()
-
 def main():
     st.markdown("## Goals")
     st.markdown("Set **compound goals** like *Run 2 miles in 18 minutes*")
+
+    # Initialize metric type in session state if not present
+    if 'current_metric' not in st.session_state:
+        st.session_state.current_metric = "time_min"
 
     # ——— ADD GOAL FORM ———
     with st.form("goals_add_goal_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            exercise = st.text_input("Exercise", placeholder="Run, Squat, Push-up", key="goals_exercise")
-            metric_type = st.selectbox("Metric", ["time_min", "reps", "weight_lbs", "distance_mi"], key="goals_metric")
+            exercise = st.text_input("Exercise", placeholder="Run, Squat, Push-up")
+            metric_type = st.selectbox("Metric", ["time_min", "reps", "weight_lbs", "distance_mi"], 
+                                      index=["time_min", "reps", "weight_lbs", "distance_mi"].index(st.session_state.current_metric))
+        
         with col2:
+            # Conditional inputs based on metric type
             if metric_type == "time_min":
-                distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0, key="goals_distance")
-                target_time = st.number_input("Target Time (min)", min_value=1.0, step=0.5, value=18.0, key="goals_time")
+                distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0)
+                target_time = st.number_input("Target Time (min)", min_value=1.0, step=0.5, value=18.0)
                 target_value = round(target_time / distance, 2)
                 st.caption(f"**Pace: {target_value:.2f} min/mi**")
             else:
-                target_value = st.number_input("Target Value", min_value=0.0, step=0.1, key="goals_value")
+                target_value = st.number_input("Target Value", min_value=0.0, step=0.1, value=10.0)
             
-            target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30), key="goals_date")
+            target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
 
-        submitted = st.form_submit_button("Add Goal", use_container_width=True, key="goals_submit")
+        submitted = st.form_submit_button("Add Goal", use_container_width=True)
+        
         if submitted:
+            # Update current metric in session state
+            st.session_state.current_metric = metric_type
+            
             if not exercise.strip():
                 st.error("Enter an exercise.")
             else:
@@ -61,8 +53,7 @@ def main():
                     )
                     conn.commit()
                     st.success("Goal added!")
-                    clear_goals_cache()
-                    st.session_state['goals_updated'] = True
+                    # Force a rerun to show the new goal
                     st.rerun()
                 except Exception as e:
                     conn.rollback()
@@ -70,20 +61,25 @@ def main():
                 finally:
                     conn.close()
 
-    # ——— FORCE REFRESH IF UPDATED ———
-    if st.session_state.get('goals_updated', False):
-        del st.session_state['goals_updated']
-        st.cache_data.clear()
-        st.rerun()
-
-    # ——— DISPLAY GOALS ———
-    df = fetch_goals(st.session_state.user_id)
+    # ——— FETCH AND DISPLAY GOALS (NO CACHE) ———
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
+            (st.session_state.user_id,)
+        )
+        rows = cur.fetchall()
+        df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+    finally:
+        conn.close()
 
     if not df.empty:
         df["Days Left"] = (df["target_date"] - date.today()).dt.days
         df["Progress"] = df["Days Left"].apply(
             lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue"
         )
+        
         def color_status(val):
             color = "green" if val == "On Track" else "orange" if val == "Urgent" else "red"
             return f'background-color: {color}; color: white; padding: 5px; border-radius: 8px; text-align: center;'
