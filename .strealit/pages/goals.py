@@ -51,6 +51,8 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
+        st.write(f"🔍 DEBUG: Submitting - exercise='{exercise}', metric={metric_type}, value={target_value}")
+        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -58,22 +60,30 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
+                st.write("🔍 DEBUG: Executing INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
+                st.write("🔍 DEBUG: Committed!")
+                
+                # Verify count
+                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                count = cur.fetchone()[0]
+                st.write(f"🔍 DEBUG: Now have {count} goals total")
+                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
                 st.balloons()
                 
-                # Refresh to show new goal
-                time.sleep(0.5)
-                st.rerun()
+                st.warning("⚠️ Auto-refresh disabled - manually refresh page")
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
+                import traceback
+                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
@@ -101,6 +111,11 @@ def main():
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
+        
+        st.write(f"🔍 DEBUG: Query returned {len(rows)} rows")
+        if rows:
+            for r in rows:
+                st.write(f"🔍 DEBUG: Row - id={r[0]}, exercise={r[1]}, metric={r[2]}, value={r[3]}")
         
         if rows:
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
