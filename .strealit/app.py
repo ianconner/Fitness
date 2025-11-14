@@ -168,7 +168,10 @@ if not st.session_state.logged_in:
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
-                    cur.execute("SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s", (username, password))
+                    cur.execute(
+                        "SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
+                        (username, password)
+                    )
                     user = cur.fetchone()
                     conn.close()
                     if user:
