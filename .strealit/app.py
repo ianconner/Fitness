@@ -103,3 +103,17 @@ else:
     sidebar()
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
+
+# ——— TEMPORARY ADMIN SETUP (REMOVE AFTER USE) ———
+if st.secrets.get("ADMIN_SETUP") == "true":
+    st.sidebar.markdown("---")
+    st.sidebar.warning("TEMP: Admin Setup Active")
+    if st.sidebar.button("MAKE ME ADMIN (ONE-TIME)", type="primary"):
+        c = conn()
+        cur = c.cursor()
+        cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
+        c.commit()
+        c.close()
+        st.session_state.role = 'admin'
+        st.sidebar.success("You are now ADMIN!")
+        st.balloons()
