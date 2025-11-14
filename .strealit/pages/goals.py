@@ -60,6 +60,16 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
+                # Check current count BEFORE insert
+                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                before_count = cur.fetchone()[0]
+                st.write(f"🔍 DEBUG: Goals BEFORE insert: {before_count}")
+                
+                # Check all existing goals
+                cur.execute("SELECT id, exercise FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                existing = cur.fetchall()
+                st.write(f"🔍 DEBUG: Existing goals: {existing}")
+                
                 st.write("🔍 DEBUG: Executing INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
@@ -68,10 +78,15 @@ def main():
                 conn.commit()
                 st.write("🔍 DEBUG: Committed!")
                 
-                # Verify count
+                # Verify count AFTER insert
                 cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
                 count = cur.fetchone()[0]
-                st.write(f"🔍 DEBUG: Now have {count} goals total")
+                st.write(f"🔍 DEBUG: Goals AFTER insert: {count}")
+                
+                # Check all goals again
+                cur.execute("SELECT id, exercise FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                after = cur.fetchall()
+                st.write(f"🔍 DEBUG: All goals after insert: {after}")
                 
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
