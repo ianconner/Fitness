@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import plotly.express as px
 
 # ——— DATABASE ENGINE ———
-engine = create_engine(st.secrets["POSTGRES_URL"])
+engine = create_engine(st.secrets["POSTGRES_URL"])  # Must be postgresql://
 
 # ——— FETCH WORKOUTS ———
 def get_workouts():
@@ -46,13 +46,11 @@ if not df_workouts.empty:
         avg_duration = df_workouts.groupby('workout_date')['duration_min'].sum().mean()
         st.metric("Avg Duration", f"{int(avg_duration)} min")
 
-    # ——— RECENT WORKOUTS ———
     st.subheader("Recent Workouts")
     recent = df_workouts.head(10)
     st.dataframe(recent[["workout_date", "exercise", "sets", "reps", "weight_lbs", "time_min", "distance_mi"]],
                  use_container_width=True, hide_index=True)
 
-    # ——— PROGRESS CHART ———
     st.subheader("Workout Frequency")
     freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
     freq['workout_date'] = pd.to_datetime(freq['workout_date'])
