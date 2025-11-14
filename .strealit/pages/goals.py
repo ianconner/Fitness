@@ -7,8 +7,9 @@ import pandas as pd
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-def fetch_goals_now(user_id):
-    """Fetch goals WITHOUT caching — always fresh"""
+# ——— USER-SPECIFIC CACHE ———
+@st.cache_data(ttl=60)
+def fetch_goals(user_id: int):
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -20,6 +21,10 @@ def fetch_goals_now(user_id):
         return pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
     finally:
         conn.close()
+
+# ——— CLEAR CACHE + REFRESH FLAG ———
+def clear_goals_cache():
+    st.cache_data.clear()
 
 def main():
     st.markdown("## Goals")
@@ -56,21 +61,23 @@ def main():
                     )
                     conn.commit()
                     st.success("Goal added!")
-                    # FORCE REFRESH
-                    st.session_state.goals_force_refresh = True
+                    clear_goals_cache()  # Clear cache
+                    st.session_state['goals_updated'] = True  # Flag for refresh
+                    st.rerun()  # Immediate rerun
                 except Exception as e:
                     conn.rollback()
                     st.error(f"Error: {e}")
                 finally:
                     conn.close()
 
-    # ——— FORCE REFRESH TRIGGER ———
-    if st.session_state.get("goals_force_refresh"):
-        del st.session_state.goals_force_refresh
-        st.experimental_rerun()
+    # ——— FORCE REFRESH IF UPDATED ———
+    if st.session_state.get('goals_updated', False):
+        del st.session_state['goals_updated']
+        st.cache_data.clear()  # Full clear for safety
+        st.rerun()
 
-    # ——— DISPLAY GOALS (ALWAYS FRESH) ———
-    df = fetch_goals_now(st.session_state.user_id)
+    # ——— DISPLAY GOALS ———
+    df = fetch_goals(st.session_state.user_id)
 
     if not df.empty:
         df["Days Left"] = (df["target_date"] - date.today()).dt.days
@@ -89,3 +96,5 @@ def main():
         )
     else:
         st.info("No goals yet. Add one above!")
+
+main()  # Ensure main() is called
