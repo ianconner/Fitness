@@ -18,3 +18,6 @@ showPyplotGlobalUse = false
 # DISABLE AUTO PAGE NAVIGATION
 [pages]
 showSidebarNavigation = false
+
+[server]
+sessionTimeout = 3600  # 1 hour in seconds
