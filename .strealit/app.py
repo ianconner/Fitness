@@ -50,7 +50,7 @@ if not st.session_state.logged_in:
     
     tab1, tab2 = st.tabs(["Login", "Signup"])
 
-       with tab1:
+    with tab1:
         with st.form("login_form"):
             st.write("### Login")
             username = st.text_input("Username", key="login_user")
@@ -92,7 +92,7 @@ if not st.session_state.logged_in:
                     cur = conn.cursor()
                     try:
                         cur.execute(
-                            "INSERT INTO users (username, password) VALUES (%s, %s) RETURNING id, username",
+                            "INSERT INTO users (878username, password) VALUES (%s, %s) RETURNING id, username",
                             (new_user, new_pass)
                         )
                         user = cur.fetchone()
@@ -108,17 +108,17 @@ else:
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
 
-        # ——— ADMIN PROMOTION BUTTON (FOR YOU ONLY) ———
-    if st.session_state.username == "ianconner":  # CHANGE THIS TO YOUR EXACT USERNAME
+    # ——— ADMIN PROMOTION BUTTON (FOR YOU ONLY) ———
+    if st.session_state.username == "ianconner":  # CHANGE TO YOUR USERNAME
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🔥 **DEV MODE**")
-        if st.sidebar.button("👑 PROMOTE TO ADMIN", type="primary", use_container_width=True):
+        st.sidebar.markdown("### DEV MODE")
+        if st.sidebar.button("PROMOTE TO ADMIN", type="primary", use_container_width=True):
             conn = get_conn()
             cur = conn.cursor()
             cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
             conn.commit()
             conn.close()
             st.session_state.role = 'admin'
-            st.sidebar.success("**ADMIN POWER UNLOCKED**")
+            st.sidebar.success("**ADMIN UNLOCKED**")
             st.balloons()
             st.rerun()
