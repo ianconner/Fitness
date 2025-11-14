@@ -51,8 +51,6 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
-        st.write(f"🔍 DEBUG: Submitting - exercise='{exercise}', metric={metric_type}, value={target_value}")
-        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -60,44 +58,19 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
-                # Check current count BEFORE insert
-                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                before_count = cur.fetchone()[0]
-                st.write(f"🔍 DEBUG: Goals BEFORE insert: {before_count}")
-                
-                # Check all existing goals
-                cur.execute("SELECT id, exercise FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                existing = cur.fetchall()
-                st.write(f"🔍 DEBUG: Existing goals: {existing}")
-                
-                st.write("🔍 DEBUG: Executing INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
-                st.write("🔍 DEBUG: Committed!")
-                
-                # Verify count AFTER insert
-                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                count = cur.fetchone()[0]
-                st.write(f"🔍 DEBUG: Goals AFTER insert: {count}")
-                
-                # Check all goals again
-                cur.execute("SELECT id, exercise FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                after = cur.fetchall()
-                st.write(f"🔍 DEBUG: All goals after insert: {after}")
-                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
-                
-                st.warning("⚠️ Auto-refresh disabled - manually refresh page")
+                time.sleep(0.5) # Give a moment to see success message
+                st.rerun() # Force refresh to show new goal
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
-                import traceback
-                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
@@ -108,15 +81,6 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
-    # Temporary debug
-    conn_debug = get_conn()
-    cur_debug = conn_debug.cursor()
-    cur_debug.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-    total = cur_debug.fetchone()[0]
-    st.write(f"🔍 DEBUG: Total goals in database for user {st.session_state.user_id}: {total}")
-    cur_debug.close()
-    conn_debug.close()
-    
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -125,11 +89,6 @@ def main():
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
-        
-        st.write(f"🔍 DEBUG: Query returned {len(rows)} rows")
-        if rows:
-            for r in rows:
-                st.write(f"🔍 DEBUG: Row - id={r[0]}, exercise={r[1]}, metric={r[2]}, value={r[3]}")
         
         if rows:
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
