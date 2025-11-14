@@ -50,13 +50,6 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
-        st.write("🔍 DEBUG: Button clicked!")
-        st.write(f"🔍 DEBUG: user_id = {st.session_state.user_id}")
-        st.write(f"🔍 DEBUG: exercise = '{exercise}'")
-        st.write(f"🔍 DEBUG: metric_type = {metric_type}")
-        st.write(f"🔍 DEBUG: target_value = {target_value}")
-        st.write(f"🔍 DEBUG: target_date = {target_date}")
-        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -64,30 +57,23 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
-                st.write("🔍 DEBUG: About to INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
-                st.write("🔍 DEBUG: INSERT committed!")
-                
-                # Verify
-                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                count = cur.fetchone()[0]
-                st.write(f"🔍 DEBUG: You now have {count} goals")
-                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
                 st.balloons()
                 
-                st.warning("⚠️ Refresh disabled - manually refresh to see goal")
+                # Refresh to show new goal
+                import time
+                time.sleep(0.5)
+                st.rerun()
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
-                import traceback
-                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
@@ -98,8 +84,6 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
-    st.write(f"🔍 DEBUG: Fetching goals for user_id = {st.session_state.user_id}")
-    
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -109,17 +93,8 @@ def main():
         )
         rows = cur.fetchall()
         
-        st.write(f"🔍 DEBUG: Found {len(rows)} rows")
         if rows:
-            st.write(f"🔍 DEBUG: First row: {rows[0]}")
-        
-        if rows:
-            st.write(f"🔍 DEBUG: Creating DataFrame with {len(rows)} rows")
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
-            
-            st.write(f"🔍 DEBUG: DataFrame shape: {df.shape}")
-            st.write(f"🔍 DEBUG: DataFrame head:")
-            st.write(df.head())
             
             # Calculate days left
             df["target_date"] = pd.to_datetime(df["target_date"])
@@ -128,18 +103,14 @@ def main():
                 lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
             )
             
-            st.write(f"🔍 DEBUG: About to loop through {len(df)} rows")
-            
-            # Display
+            # Display each goal
             for idx, row in df.iterrows():
-                st.write(f"🔍 DEBUG: Processing row {idx}, goal_id={row['id']}")
                 goal_id = row['id']
                 
                 # Check if this goal is being edited
                 if st.session_state.editing_goal_id == goal_id:
-                    st.write(f"🔍 DEBUG: Goal {goal_id} is in EDIT mode")
                     # Edit mode
-                    st.markdown(f"### Editing: {row['exercise']}")
+                    st.markdown(f"### ✏️ Editing: {row['exercise']}")
                     
                     edit_exercise = st.text_input("Exercise", value=row['exercise'], key=f"edit_ex_{goal_id}")
                     
@@ -163,7 +134,7 @@ def main():
                     
                     col_save, col_cancel = st.columns(2)
                     with col_save:
-                        if st.button("💾 Save", key=f"save_{goal_id}", use_container_width=True):
+                        if st.button("💾 Save Changes", key=f"save_{goal_id}", use_container_width=True, type="primary"):
                             conn_edit = get_conn()
                             cur_edit = conn_edit.cursor()
                             try:
@@ -174,6 +145,7 @@ def main():
                                 conn_edit.commit()
                                 st.success("Goal updated!")
                                 st.session_state.editing_goal_id = None
+                                time.sleep(0.5)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {e}")
@@ -187,18 +159,17 @@ def main():
                     
                     st.divider()
                 else:
-                    st.write(f"🔍 DEBUG: Goal {goal_id} is in DISPLAY mode")
-                    st.write(f"🔍 DEBUG: Exercise={row['exercise']}, Progress={row['Progress']}")
+                    # Display mode - Simple layout that works
+                    col_main, col_buttons = st.columns([5, 1])
                     
-                    # Simplified display mode for testing
-                    st.markdown(f"**{row['exercise']}** - {row['metric_type']}: {row['target_value']} - Due: {row['target_date'].strftime('%Y-%m-%d')} - {row['Progress']}")
+                    with col_main:
+                        st.markdown(f"### {row['exercise']}")
+                        st.write(f"**{row['metric_type'].replace('_', ' ').title()}:** {row['target_value']} | **Due:** {row['target_date'].strftime('%b %d, %Y')} | **Status:** {row['Progress']}")
                     
-                    col1, col2 = st.columns([0.1, 0.1])
-                    with col1:
+                    with col_buttons:
                         if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
                             st.session_state.editing_goal_id = goal_id
                             st.rerun()
-                    with col2:
                         if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal"):
                             conn_del = get_conn()
                             cur_del = conn_del.cursor()
@@ -206,6 +177,7 @@ def main():
                                 cur_del.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (goal_id, st.session_state.user_id))
                                 conn_del.commit()
                                 st.success("Goal deleted!")
+                                time.sleep(0.5)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {e}")
@@ -214,7 +186,6 @@ def main():
                                 conn_del.close()
                     
                     st.divider()
-                    st.write(f"🔍 DEBUG: Finished displaying goal {goal_id}")
         else:
             st.info("No goals yet. Add one above!")
             
