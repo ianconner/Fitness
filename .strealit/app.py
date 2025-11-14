@@ -6,11 +6,10 @@ import psycopg2
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE (EMBEDDED SCHEMA) ———
+# ——— INITIALIZE DATABASE ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
-    
     schema_sql = """
     DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
@@ -34,13 +33,11 @@ def init_db():
         time_min NUMERIC, rest_min NUMERIC, distance_mi NUMERIC
     );
     """
-    
     cur.execute(schema_sql)
     st.success("Database schema loaded!")
     conn.commit()
     conn.close()
 
-# ——— RUN INIT_DB ON EVERY LOAD ———
 init_db()
 
 # ——— SESSION STATE ———
@@ -49,23 +46,38 @@ for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in']:
         st.session_state[key] = None
 st.session_state.logged_in = st.session_state.user_id is not None
 
-# ——— SIDEBAR ———
+# ——— AUTO-PROMOTE ianconner TO ADMIN ———
+if st.session_state.logged_in and st.session_state.username == "ianconner" and st.session_state.role != "admin":
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET role='admin' WHERE username='ianconner'")
+    conn.commit()
+    conn.close()
+    st.session_state.role = 'admin'
+    st.rerun()
+
+# ——— SIDEBAR WITH STYLED BUTTONS ———
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     
-    if st.sidebar.button("Home", use_container_width=True):
-        st.rerun()
-    if st.sidebar.button("Dashboard", use_container_width=True):
-        st.switch_page("pages/01_Dashboard.py")
-    if st.sidebar.button("Log Workout", use_container_width=True):
-        st.switch_page("pages/02_Log_Workout.py")
-    if st.sidebar.button("Goals", use_container_width=True):
-        st.switch_page("pages/03_Goals.py")
-    if st.sidebar.button("SOPHIA Coach", use_container_width=True):
-        st.switch_page("pages/04_AI_Coach.py")
+    btn = st.sidebar.button("Home", use_container_width=True, type="primary")
+    if btn: st.rerun()
+    
+    btn = st.sidebar.button("Dashboard", use_container_width=True)
+    if btn: st.switch_page("pages/01_Dashboard.py")
+    
+    btn = st.sidebar.button("Log Workout", use_container_width=True)
+    if btn: st.switch_page("pages/02_Log_Workout.py")
+    
+    btn = st.sidebar.button("Goals", use_container_width=True)
+    if btn: st.switch_page("pages/03_Goals.py")
+    
+    btn = st.sidebar.button("SOPHIA Coach", use_container_width=True)
+    if btn: st.switch_page("pages/04_AI_Coach.py")
+    
     if st.session_state.role == 'admin':
-        if st.sidebar.button("Admin", use_container_width=True):
-            st.switch_page("pages/05_Admin.py")
+        btn = st.sidebar.button("Admin", use_container_width=True, type="secondary")
+        if btn: st.switch_page("pages/05_Admin.py")
     
     if st.sidebar.button("Logout", use_container_width=True):
         for k in list(st.session_state.keys()):
@@ -127,16 +139,3 @@ else:
     sidebar()
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
-    if st.session_state.username == "ianconner":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### DEV MODE")
-        if st.sidebar.button("PROMOTE TO ADMIN", type="primary", use_container_width=True):
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
-            conn.commit()
-            conn.close()
-            st.session_state.role = 'admin'
-            st.sidebar.success("ADMIN UNLOCKED")
-            st.balloons()
-            st.rerun()
