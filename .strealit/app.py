@@ -73,22 +73,22 @@ st.session_state.logged_in = st.session_state.user_id is not None
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     
-    # Home = Refresh main app
+    # Home = Refresh
     if st.sidebar.button("Home", use_container_width=True):
         st.rerun()
     
-    # Pages only
+    # Pages in .strealit/pages/
     if st.sidebar.button("Dashboard", use_container_width=True):
-        st.switch_page("../pages/01_Dashboard.py")
+        st.switch_page("pages/01_Dashboard.py")
     if st.sidebar.button("Log Workout", use_container_width=True):
-        st.switch_page("../pages/02_Log_Workout.py")
+        st.switch_page("pages/02_Log_Workout.py")
     if st.sidebar.button("Goals", use_container_width=True):
-        st.switch_page("../pages/03_Goals.py")
+        st.switch_page("pages/03_Goals.py")
     if st.sidebar.button("SOPHIA Coach", use_container_width=True):
-        st.switch_page("../pages/04_AI_Coach.py")
+        st.switch_page("pages/04_AI_Coach.py")
     if st.session_state.role == 'admin':
         if st.sidebar.button("Admin", use_container_width=True):
-            st.switch_page("../pages/05_Admin.py")
+            st.switch_page("pages/05_Admin.py")
     
     if st.sidebar.button("Logout", use_container_width=True):
         for k in list(st.session_state.keys()):
@@ -156,7 +156,6 @@ if not st.session_state.logged_in:
                         conn.close()
 
 else:
-    # ——— DELAY SUCCESS MESSAGE ———
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.success("Logged in!")
@@ -166,7 +165,6 @@ else:
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
 
-    # ——— ADMIN PROMOTION BUTTON ———
     if st.session_state.username == "ianconner":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### DEV MODE")
