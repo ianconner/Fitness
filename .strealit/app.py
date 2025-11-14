@@ -1,26 +1,45 @@
 # app.py
 import streamlit as st
 import psycopg2
-from datetime import datetime
 
 # ——— DATABASE CONNECTION ———
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE ———
+# ——— INITIALIZE DATABASE (ADD ROLE COLUMN IF MISSING) ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
-    with open("schema.sql", "r") as f:
-        cur.execute(f.read())
+    
+    # Add 'role' column if it doesn't exist
+    cur.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                          WHERE table_name = 'users' AND column_name = 'role') THEN
+                ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
+            END IF;
+        END $$;
+    """)
+    
+    # Ensure all users have role
+    cur.execute("UPDATE users SET role = 'user' WHERE role IS NULL")
+    
+    # Load schema.sql for other tables
+    try:
+        with open("schema.sql", "r") as f:
+            cur.execute(f.read())
+    except:
+        pass  # schema.sql might not exist yet
+    
     conn.commit()
     conn.close()
 
-# Run on first load
+# Run once
 try:
     init_db()
 except:
-    pass  # Schema already exists
+    pass
 
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role']:
@@ -28,7 +47,7 @@ for key in ['logged_in', 'user_id', 'username', 'role']:
         st.session_state[key] = None
 st.session_state.logged_in = st.session_state.user_id is not None
 
-# ——— SIDEBAR (AFTER LOGIN) ———
+# ——— SIDEBAR ———
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     st.sidebar.page_link("app.py", label="Home")
@@ -63,7 +82,7 @@ if not st.session_state.logged_in:
                     conn = get_conn()
                     cur = conn.cursor()
                     cur.execute(
-                        "SELECT id, username, role FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
+                        "SELECT id, username, COALESCE(role, 'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
                         (username, password)
                     )
                     user = cur.fetchone()
@@ -92,7 +111,7 @@ if not st.session_state.logged_in:
                     cur = conn.cursor()
                     try:
                         cur.execute(
-                            "INSERT INTO users (878username, password) VALUES (%s, %s) RETURNING id, username",
+                            "INSERT INTO users (username, password, role) VALUES (%s, %s, 'user') RETURNING id, username",
                             (new_user, new_pass)
                         )
                         user = cur.fetchone()
@@ -119,6 +138,6 @@ else:
             conn.commit()
             conn.close()
             st.session_state.role = 'admin'
-            st.sidebar.success("**ADMIN UNLOCKED**")
+            st.sidebar.success("ADMIN UNLOCKED")
             st.balloons()
             st.rerun()
