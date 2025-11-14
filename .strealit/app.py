@@ -58,7 +58,7 @@ if st.session_state.logged_in and st.session_state.username == "ianconner" and s
     st.session_state.role = 'admin'
     st.rerun()
 
-# ——— STUNNING SIDEBAR ———
+# ——— GORGEOUS SIDEBAR ———
 def render_sidebar():
     st.markdown("""
     <style>
