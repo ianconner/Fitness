@@ -58,19 +58,27 @@ if st.session_state.logged_in and st.session_state.username == "ianconner" and s
     st.session_state.role = 'admin'
     st.rerun()
 
-# ——— GORGEOUS SIDEBAR WITH NUCLEAR AUTO-NAV KILLER ———
+# ——— GORGEOUS SIDEBAR: KILL AUTO-NAV, KEEP OUR BUTTONS ———
 def render_sidebar():
-    # === INJECT CSS + JS TO KILL STREAMLIT'S AUTO-NAV ===
+    # === PRECISE CSS: HIDE ONLY STREAMLIT'S AUTO-GENERATED NAVIGATION ===
     st.markdown("""
     <style>
-    /* HIDE DEFAULT SIDEBAR NAVIGATION */
-    section[data-testid="stSidebar"] > div:first-child > div:first-child > div:first-child,
-    [data-testid="stSidebarNav"],
-    a[href^="/?page="],
-    [data-testid="stSidebar"] [kind="secondary"] {
+    /* HIDE STREAMLIT'S AUTO PAGE NAVIGATION */
+    [data-testid="stSidebarNav"] {
         display: none !important;
     }
-    /* STYLE OUR BUTTONS */
+    /* HIDE ANY ?page= URL LINKS */
+    a[href*="?page="] {
+        display: none !important;
+    }
+    /* HIDE DEFAULT HEADERS IN SIDEBAR */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        display: none !important;
+    }
+
+    /* === STYLE OUR CUSTOM BUTTONS === */
     .sidebar .stButton > button {
         background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
         color: white !important;
@@ -104,33 +112,9 @@ def render_sidebar():
     </style>
     """, unsafe_allow_html=True)
 
-    # === JS: NUKE ANY RESIDUAL NAV (RUN AFTER RENDER) ===
-    st.markdown("""
-    <script>
-    document.addEventListener("DOMContentLoaded", () => {
-        setTimeout(() => {
-            // Remove any auto-generated links
-            document.querySelectorAll('a[href*="page="]').forEach(el => el.remove());
-            document.querySelectorAll('[data-testid="stSidebarNav"]').forEach(el => el.remove());
-            // Ensure only our content remains
-            const sidebar = document.querySelector('[data-testid="stSidebar"]');
-            if (sidebar) {
-                const children = sidebar.children;
-                for (let i = children.length - 1; i >= 0; i--) {
-                    const child = children[i];
-                    if (!child.innerHTML.includes("Home") && 
-                        !child.innerHTML.includes("Dashboard") && 
-                        !child.innerHTML.includes("SOPHIA")) {
-                        child.style.display = "none";
-                    }
-                }
-            }
-        }, 800);
-    });
-    </script>
-    """, unsafe_allow_html=True)
+    # === NO JS — CSS IS SAFE AND SUFFICIENT ===
 
-    # === YOUR BUTTONS ONLY ===
+    # === YOUR BUTTONS (100% VISIBLE) ===
     st.sidebar.success(f"**{st.session_state.username}**")
 
     if st.sidebar.button("Home", key="nav_home", use_container_width=True):
