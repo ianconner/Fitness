@@ -69,7 +69,7 @@ def init_db():
 for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page']:
     if key not in st.session_state:
         st.session_state[key] = None
-st.session_session.logged_in = st.session_state.user_id is not None
+st.session_state.logged_in = st.session_state.user_id is not None
 
 # ——— AUTO-PROMOTE ianconner TO ADMIN ———
 if st.session_state.logged_in and st.session_state.username == "ianconner" and st.session_state.role != "admin":
