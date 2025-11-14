@@ -1,73 +1,98 @@
-# .strealit/pages/05_Admin.py
+# pages/admin.py
 import streamlit as st
-import psycopg2
 import pandas as pd
+from sqlalchemy import create_engine
 
-# ——— DATABASE CONNECTION ———
-def get_conn():
-    return psycopg2.connect(st.secrets["POSTGRES_URL"])
+# ——— DATABASE ENGINE ———
+engine = create_engine(st.secrets["POSTGRES_URL"])
 
-# ——— CHECK ADMIN ———
-if st.session_state.role != 'admin':
-    st.error("Access denied.")
-    st.stop()
+def main():
+    if st.session_state.role != 'admin':
+        st.error("Access denied.")
+        return
 
-st.markdown("## Admin Panel")
-st.markdown("Manage users, reset passwords, and modify data.")
+    st.markdown("## Admin Panel")
+    st.markdown("System management and user oversight.")
 
-# ——— USER LIST ———
-conn = get_conn()
-users = pd.read_sql("SELECT id, username, role FROM users", conn)
-conn.close()
+    # ——— USER MANAGEMENT ———
+    st.subheader("User Management")
+    users_df = pd.read_sql("SELECT id, username, role FROM users ORDER BY username", engine)
+    edited_df = st.data_editor(
+        users_df,
+        column_config={
+            "role": st.column_config.SelectboxColumn(
+                "Role",
+                options=["user", "admin"],
+                required=True
+            )
+        },
+        use_container_width=True,
+        hide_index=True
+    )
 
-selected_user = st.selectbox("Select User", users["username"])
-user_row = users[users["username"] == selected_user].iloc[0]
-
-# ——— USER ACTIONS ———
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Reset Password", use_container_width=True):
-        new_pass = st.text_input("New Password", type="password", key="reset_pass")
-        if st.button("Confirm Reset"):
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("UPDATE users SET password=%s WHERE id=%s", (new_pass, user_row["id"]))
-            conn.commit()
-            conn.close()
-            st.success(f"Password reset for **{selected_user}**")
+    if st.button("Save Role Changes", type="primary"):
+        try:
+            with engine.connect() as conn:
+                for idx, row in edited_df.iterrows():
+                    if row["role"] != users_df.iloc[idx]["role"]:
+                        conn.execute(
+                            "UPDATE users SET role = %s WHERE id = %s",
+                            (row["role"], row["id"])
+                        )
+                conn.commit()
+            st.success("Roles updated!")
             st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-with col2:
-    new_role = st.selectbox("Change Role", ["user", "admin"], index=0 if user_row["role"] == "user" else 1)
-    if st.button("Update Role", use_container_width=True):
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET role=%s WHERE id=%s", (new_role, user_row["id"]))
-        conn.commit()
-        conn.close()
-        st.success(f"Role updated to **{new_role}**")
-        st.rerun()
+    # ——— DATABASE RESET ———
+    st.subheader("Danger Zone")
+    with st.expander("Reset Database (Irreversible)", expanded=False):
+        st.warning("This will delete **all** workouts, goals, and reset schema.")
+        password = st.text_input("Enter admin password to confirm", type="password")
+        if st.button("NUKE DATABASE", type="secondary"):
+            if password == st.secrets.get("ADMIN_NUKE_PASS", "default_nuke_pass"):
+                try:
+                    with engine.connect() as conn:
+                        conn.execute("DROP TABLE IF EXISTS workout_exercises, workouts, goals, users CASCADE")
+                        conn.execute("""
+                            CREATE TABLE users (
+                                id SERIAL PRIMARY KEY,
+                                username TEXT UNIQUE NOT NULL,
+                                password TEXT NOT NULL,
+                                role TEXT DEFAULT 'user'
+                            );
+                            INSERT INTO users (username, password, role) VALUES ('ianconner', 'admin123', 'admin');
+                        """)
+                        conn.commit()
+                    st.success("Database nuked and reset. App will restart.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+            else:
+                st.error("Incorrect password.")
 
-# ——— DELETE USER ———
-if st.button("Delete User (Irreversible)", type="secondary", use_container_width=True):
-    if st.checkbox("I understand this deletes all data"):
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM users WHERE id=%s", (user_row["id"],))
-        conn.commit()
-        conn.close()
-        st.success(f"User **{selected_user}** deleted.")
-        st.rerun()
+    # ——— SYSTEM STATS ———
+    st.subheader("System Stats")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        total_users = pd.read_sql("SELECT COUNT(*) FROM users", engine).iloc[0,0]
+        st.metric("Total Users", total_users)
+    with col2:
+        total_workouts = pd.read_sql("SELECT COUNT(*) FROM workouts", engine).iloc[0,0]
+        st.metric("Total Workouts", total_workouts)
+    with col3:
+        total_goals = pd.read_sql("SELECT COUNT(*) FROM goals", engine).iloc[0,0]
+        st.metric("Total Goals", total_goals)
 
-# ——— RAW DB VIEW ———
-st.markdown("### Raw Database")
-tab1, tab2, tab3 = st.tabs(["Users", "Workouts", "Goals"])
-with tab1:
-    df_users = pd.read_sql("SELECT * FROM users", get_conn())
-    st.dataframe(df_users)
-with tab2:
-    df_workouts = pd.read_sql("SELECT * FROM workouts", get_conn())
-    st.dataframe(df_workouts)
-with tab3:
-    df_goals = pd.read_sql("SELECT * FROM goals", get_conn())
-    st.dataframe(df_goals)
+    # ——— RAW DATA VIEW ———
+    with st.expander("View Raw Tables"):
+        tab1, tab2, tab3, tab4 = st.tabs(["Users", "Workouts", "Exercises", "Goals"])
+        with tab1:
+            st.dataframe(pd.read_sql("SELECT * FROM users", engine), use_container_width=True)
+        with tab2:
+            st.dataframe(pd.read_sql("SELECT * FROM workouts", engine), use_container_width=True)
+        with tab3:
+            st.dataframe(pd.read_sql("SELECT * FROM workout_exercises", engine), use_container_width=True)
+        with tab4:
+            st.dataframe(pd.read_sql("SELECT * FROM goals", engine), use_container_width=True)
