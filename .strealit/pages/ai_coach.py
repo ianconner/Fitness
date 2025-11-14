@@ -5,7 +5,6 @@ from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine
 
-# ——— DATABASE ENGINE ———
 engine = create_engine(st.secrets["POSTGRES_URL"])
 
 def get_user_data():
@@ -34,7 +33,7 @@ def generate_insight_prompt(workouts, goals):
     if workouts.empty and goals.empty:
         return "No data yet. Log a workout to get started."
 
-    insight = "SOPHIA ANALYSIS:\n"
+    insight = "RISE ANALYSIS:\n"
 
     if not workouts.empty:
         total_sessions = len(workouts['workout_date'].unique())
@@ -56,60 +55,55 @@ def generate_insight_prompt(workouts, goals):
     return insight
 
 def main():
-    st.markdown("## SOPHIA Coach")
-    st.markdown("**Smart Optimized Performance Health Intelligence Assistant**")
+    st.markdown("## RISE Coach")
+    st.markdown("**Resilient Integrated Strength Engine — Your AI Performance Partner**")
 
-    # ——— AUTO-ANALYSIS ON LOAD ———
     if "analysis_done" not in st.session_state:
-        with st.spinner("SOPHIA is analyzing your data..."):
+        with st.spinner("RISE is analyzing your data..."):
             workouts, goals = get_user_data()
             analysis = generate_insight_prompt(workouts, goals)
 
             if "messages" not in st.session_state:
                 st.session_state.messages = []
 
-            # Inject SOPHIA's first message
-            sophia_intro = (
-                "SOPHIA online. Analyzing your fitness DNA...\n\n"
+            rise_intro = (
+                "RISE online. Scanning your strength profile...\n\n"
                 f"{analysis}\n\n"
-                "I'm ready. Ask me anything — programming, recovery, PRs, form, nutrition."
+                "I'm your AI coach. Ask me: programming, recovery, PRs, form, nutrition."
             )
 
             st.session_state.messages = [
-                {"role": "assistant", "content": sophia_intro}
+                {"role": "assistant", "content": rise_intro}
             ]
             st.session_state.analysis_done = True
 
-    # ——— CHAT DISPLAY ———
     for msg in st.session_state.messages:
         if msg["role"] == "assistant":
-            with st.chat_message("assistant", avatar="https://api.dicebear.com/7.x/bottts/svg?seed=SOPHIA"):
+            with st.chat_message("assistant", avatar="https://api.dicebear.com/7.x/bottts/svg?seed=RISE"):
                 st.markdown(msg["content"])
         else:
             with st.chat_message("user"):
                 st.markdown(msg["content"])
 
-    # ——— USER INPUT ———
-    if prompt := st.chat_input("Ask SOPHIA..."):
+    if prompt := st.chat_input("Ask RISE..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant", avatar="https://api.dicebear.com/7.x/bottts/svg?seed=SOPHIA"):
-            with st.spinner("SOPHIA is thinking..."):
+        with st.chat_message("assistant", avatar="https://api.dicebear.com/7.x/bottts/svg?seed=RISE"):
+            with st.spinner("RISE is thinking..."):
                 try:
                     headers = {
                         "Authorization": f"Bearer {st.secrets['GROK_API_KEY']}",
                         "Content-Type": "application/json"
                     }
-                    # Rebuild context
                     workouts, goals = get_user_data()
                     context = generate_insight_prompt(workouts, goals)
 
                     payload = {
                         "model": "grok-beta",
                         "messages": [
-                            {"role": "system", "content": f"You are SOPHIA, elite AI coach. Use this data:\n{context}"},
+                            {"role": "system", "content": f"You are RISE, elite AI coach. Use this data:\n{context}"},
                             *st.session_state.messages
                         ],
                         "temperature": 0.7,
@@ -118,7 +112,7 @@ def main():
                     response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
                     reply = response.json()["choices"][0]["message"]["content"] if response.status_code == 200 else "Connection error."
                 except:
-                    reply = "SOPHIA offline. Try again."
+                    reply = "RISE offline. Try again."
 
                 st.markdown(reply)
                 st.session_state.messages.append({"role": "assistant", "content": reply})
