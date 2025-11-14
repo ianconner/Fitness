@@ -22,11 +22,15 @@ def fetch_goals(user_id: int):
     finally:
         conn.close()
 
+# ——— CLEAR CACHE ———
+def clear_goals_cache():
+    st.cache_data.clear()
+
 def main():
     st.markdown("## Goals")
     st.markdown("Set **compound goals** like *Run 2 miles in 18 minutes*")
 
-    # ——— ADD GOAL FORM (UNIQUE KEY) ———
+    # ——— ADD GOAL FORM ———
     with st.form("goals_add_goal_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -57,8 +61,7 @@ def main():
                     )
                     conn.commit()
                     st.success("Goal added!")
-                    # Clear cache + force refresh
-                    st.cache_data.clear()
+                    clear_goals_cache()
                     st.session_state['goals_updated'] = True
                     st.rerun()
                 except Exception as e:
