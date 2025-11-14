@@ -116,4 +116,125 @@ def render_sidebar():
             const sidebar = document.querySelector('[data-testid="stSidebar"]');
             if (sidebar) {
                 const children = sidebar.children;
-                for (let i = children.length - 1;
+                for (let i = children.length - 1; i >= 0; i--) {
+                    const child = children[i];
+                    if (!child.innerHTML.includes("Home") && 
+                        !child.innerHTML.includes("Dashboard") && 
+                        !child.innerHTML.includes("SOPHIA")) {
+                        child.style.display = "none";
+                    }
+                }
+            }
+        }, 800);
+    });
+    </script>
+    """, unsafe_allow_html=True)
+
+    # === YOUR BUTTONS ONLY ===
+    st.sidebar.success(f"**{st.session_state.username}**")
+
+    if st.sidebar.button("Home", key="nav_home", use_container_width=True):
+        st.session_state.current_page = "home"
+        st.rerun()
+    if st.sidebar.button("Dashboard", key="nav_dash", use_container_width=True):
+        st.session_state.current_page = "dashboard"
+        st.rerun()
+    if st.sidebar.button("Log Workout", key="nav_log", use_container_width=True):
+        st.session_state.current_page = "log_workout"
+        st.rerun()
+    if st.sidebar.button("Goals", key="nav_goals", use_container_width=True):
+        st.session_state.current_page = "goals"
+        st.rerun()
+    if st.sidebar.button("SOPHIA Coach", key="nav_coach", use_container_width=True):
+        st.session_state.current_page = "ai_coach"
+        st.rerun()
+    if st.session_state.role == 'admin':
+        if st.sidebar.button("Admin", key="nav_admin", use_container_width=True):
+            st.session_state.current_page = "admin"
+            st.rerun()
+    
+    if st.sidebar.button("Logout", key="nav_logout", use_container_width=True):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+
+# ——— LOGIN / SIGNUP ———
+if not st.session_state.logged_in:
+    st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["Login", "Signup"])
+    with tab1:
+        with st.form("main_login_form"):
+            st.write("### Login")
+            username = st.text_input("Username", key="main_login_user")
+            password = st.text_input("Password", type="password", key="main_login_pass")
+            if st.form_submit_button("Login"):
+                if not username or not password:
+                    st.error("Fill both fields.")
+                else:
+                    conn = get_conn()
+                    cur = conn.cursor()
+                    cur.execute("SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s", (username, password))
+                    user = cur.fetchone()
+                    conn.close()
+                    if user:
+                        st.session_state.update(dict(zip(['user_id','username','role'], user)))
+                        st.session_state.logged_in = True
+                        st.session_state.just_logged_in = True
+                        st.session_state.current_page = "home"
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
+    with tab2:
+        with st.form("main_signup_form"):
+            st.write("### Signup")
+            new_user = st.text_input("Username", key="main_signup_user")
+            new_pass = st.text_input("Password", type="password", key="main_signup_pass")
+            if st.form_submit_button("Signup"):
+                if not new_user or not new_pass:
+                    st.error("Fill both fields.")
+                else:
+                    conn = get_conn()
+                    cur = conn.cursor()
+                    try:
+                        cur.execute("INSERT INTO users (username,password,role) VALUES (%s,%s,'user') RETURNING id,username", (new_user,new_pass))
+                        user = cur.fetchone()
+                        conn.commit()
+                        st.success(f"Created {user[1]}! Log in.")
+                    except psycopg2.IntegrityError:
+                        st.error("Username taken.")
+                    finally:
+                        conn.close()
+else:
+    render_sidebar()
+
+    if st.session_state.get("just_logged_in"):
+        del st.session_state["just_logged_in"]
+        st.success("Logged in!")
+        st.rerun()
+
+    page = st.session_state.get("current_page", "home")
+
+    if page == "home":
+        st.markdown(f"## Welcome, **{st.session_state.username}**")
+        st.info("Use the sidebar to navigate.")
+    
+    elif page == "dashboard":
+        import pages.dashboard as p
+        p.main()
+    elif page == "log_workout":
+        import pages.log_workout as p
+        p.main()
+    elif page == "goals":
+        import pages.goals as p
+        p.main()
+    elif page == "ai_coach":
+        import pages.ai_coach as p
+        p.main()
+    elif page == "admin":
+        import pages.admin as p
+        p.main()
+    else:
+        st.session_state.current_page = "home"
+        st.rerun()
