@@ -190,6 +190,12 @@ if not st.session_state.logged_in:
                             st.error("Invalid credentials")
                     finally:
                         conn.close()
+                    # After successful login
+st.session_state.logged_in = True
+st.session_state.just_logged_in = True
+st.session_state.current_page = "home"
+st.session_state.goals_updated = False  # Initialize
+st.rerun()
 
     # ——— SIGNUP TAB ———
     with tab2:
