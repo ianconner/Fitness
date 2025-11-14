@@ -73,8 +73,11 @@ st.session_state.logged_in = st.session_state.user_id is not None
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     
+    # Home = Refresh main app
     if st.sidebar.button("Home", use_container_width=True):
-        st.switch_page("../app.py")
+        st.rerun()
+    
+    # Pages only
     if st.sidebar.button("Dashboard", use_container_width=True):
         st.switch_page("../pages/01_Dashboard.py")
     if st.sidebar.button("Log Workout", use_container_width=True):
