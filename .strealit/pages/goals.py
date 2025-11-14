@@ -114,7 +114,12 @@ def main():
             st.write(f"🔍 DEBUG: First row: {rows[0]}")
         
         if rows:
+            st.write(f"🔍 DEBUG: Creating DataFrame with {len(rows)} rows")
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+            
+            st.write(f"🔍 DEBUG: DataFrame shape: {df.shape}")
+            st.write(f"🔍 DEBUG: DataFrame head:")
+            st.write(df.head())
             
             # Calculate days left
             df["target_date"] = pd.to_datetime(df["target_date"])
@@ -123,8 +128,11 @@ def main():
                 lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
             )
             
+            st.write(f"🔍 DEBUG: About to loop through {len(df)} rows")
+            
             # Display
             for idx, row in df.iterrows():
+                st.write(f"🔍 DEBUG: Processing row {idx}, goal_id={row['id']}")
                 goal_id = row['id']
                 
                 # Check if this goal is being edited
