@@ -11,122 +11,91 @@ def main():
     st.markdown("## Goals")
     st.markdown("Set **compound goals** like *Run 2 miles in 18 minutes*")
 
-    # Initialize metric type in session state if not present
-    if 'current_metric' not in st.session_state:
-        st.session_state.current_metric = "time_min"
-
     # ——— ADD GOAL FORM ———
-    with st.form("goals_add_goal_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            exercise = st.text_input("Exercise", placeholder="Run, Squat, Push-up")
-            metric_type = st.selectbox("Metric", ["time_min", "reps", "weight_lbs", "distance_mi"], 
-                                      index=["time_min", "reps", "weight_lbs", "distance_mi"].index(st.session_state.current_metric))
-        
-        with col2:
-            # Conditional inputs based on metric type
-            if metric_type == "time_min":
-                distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0)
-                target_time = st.number_input("Target Time (min)", min_value=1.0, step=0.5, value=18.0)
-                target_value = round(target_time / distance, 2)
-                st.caption(f"**Pace: {target_value:.2f} min/mi**")
-            else:
-                target_value = st.number_input("Target Value", min_value=0.0, step=0.1, value=10.0)
-            
-            target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
+    exercise = st.text_input("Exercise", placeholder="Run, Squat, Push-up", key="goal_exercise")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        metric_type = st.selectbox("Metric", ["time_min", "reps", "weight_lbs", "distance_mi"], key="goal_metric")
+    
+    with col2:
+        if metric_type == "time_min":
+            distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0, key="goal_distance")
+        target_value = st.number_input("Target Value", min_value=0.1, step=0.1, value=10.0, key="goal_value")
+    
+    with col3:
+        target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30), key="goal_date")
+    
+    # Show calculated pace for time_min
+    if metric_type == "time_min" and 'goal_distance' in st.session_state:
+        pace = target_value / st.session_state.goal_distance
+        st.caption(f"**Pace: {pace:.2f} min/mi**")
 
-        submitted = st.form_submit_button("Add Goal", use_container_width=True)
-        
-        if submitted:
-            # Update current metric in session state
-            st.session_state.current_metric = metric_type
-            
-            if not exercise.strip():
-                st.error("Enter an exercise.")
-            else:
-                conn = get_conn()
-                cur = conn.cursor()
-                try:
-                    # Debug: Show what we're trying to insert
-                    st.write(f"DEBUG: Inserting - user_id={st.session_state.user_id}, exercise={exercise}, metric={metric_type}, value={target_value}, date={target_date}")
-                    
-                    cur.execute(
-                        "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
-                        (st.session_state.user_id, exercise, metric_type, target_value, target_date)
-                    )
-                    conn.commit()
-                    st.success("Goal added successfully!")
-                    
-                    # Verify it was inserted
-                    cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                    count = cur.fetchone()[0]
-                    st.write(f"DEBUG: You now have {count} total goals")
-                    
-                except Exception as e:
-                    conn.rollback()
-                    st.error(f"Database Error: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
-                finally:
-                    cur.close()
-                    conn.close()
+    if st.button("Add Goal", type="primary", use_container_width=True):
+        if not exercise.strip():
+            st.error("Please enter an exercise name.")
+        else:
+            conn = get_conn()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                    (st.session_state.user_id, exercise, metric_type, target_value, target_date)
+                )
+                conn.commit()
+                st.success(f"✓ Goal added: {exercise}")
+                st.balloons()
+                # Force refresh
+                st.rerun()
+            except Exception as e:
+                conn.rollback()
+                st.error(f"Error: {e}")
+            finally:
+                cur.close()
+                conn.close()
 
-    # ——— FETCH AND DISPLAY GOALS ———
-    st.subheader("Your Goals")
+    st.divider()
+
+    # ——— DISPLAY GOALS ———
+    st.subheader("Active Goals")
     
     conn = get_conn()
     cur = conn.cursor()
     try:
-        # Debug: Check user_id
-        st.write(f"DEBUG: Fetching goals for user_id={st.session_state.user_id}")
-        
         cur.execute(
             "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
         
-        # Debug: Show raw data
-        st.write(f"DEBUG: Found {len(rows)} goals")
         if rows:
-            st.write("DEBUG: Raw data:", rows)
-        
-        df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+            df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+            
+            # Calculate days left
+            df["target_date"] = pd.to_datetime(df["target_date"])
+            df["Days Left"] = (df["target_date"] - pd.Timestamp(date.today())).dt.days
+            df["Progress"] = df["Days Left"].apply(
+                lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
+            )
+            
+            # Display
+            for idx, row in df.iterrows():
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col1:
+                        st.markdown(f"**{row['exercise']}**")
+                    with col2:
+                        st.text(f"{row['metric_type']}: {row['target_value']}")
+                    with col3:
+                        st.text(f"Due: {row['target_date'].strftime('%Y-%m-%d')}")
+                    with col4:
+                        st.markdown(row['Progress'])
+                    st.divider()
+        else:
+            st.info("No goals yet. Add one above!")
+            
     except Exception as e:
-        st.error(f"Error fetching goals: {e}")
-        import traceback
-        st.code(traceback.format_exc())
-        df = pd.DataFrame()
+        st.error(f"Error loading goals: {e}")
     finally:
         cur.close()
         conn.close()
-
-    if not df.empty:
-        df["Days Left"] = (df["target_date"] - pd.Timestamp(date.today())).dt.days
-        df["Progress"] = df["Days Left"].apply(
-            lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue"
-        )
-        
-        def color_status(val):
-            color = "green" if val == "On Track" else "orange" if val == "Urgent" else "red"
-            return f'background-color: {color}; color: white; padding: 5px; border-radius: 8px; text-align: center;'
-        
-        df_display = df[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Progress"]].copy()
-        st.dataframe(
-            df_display.style.applymap(color_status, subset=["Progress"]),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No goals yet. Add one above!")
-        
-        # Debug: Check if ANY goals exist in the table
-        conn2 = get_conn()
-        cur2 = conn2.cursor()
-        try:
-            cur2.execute("SELECT COUNT(*) FROM goals")
-            total_goals = cur2.fetchone()[0]
-            st.write(f"DEBUG: Total goals in database (all users): {total_goals}")
-        finally:
-            cur2.close()
-            conn2.close()
