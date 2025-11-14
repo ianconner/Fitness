@@ -50,6 +50,13 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
+        st.write("🔍 DEBUG: Button clicked!")
+        st.write(f"🔍 DEBUG: user_id = {st.session_state.user_id}")
+        st.write(f"🔍 DEBUG: exercise = '{exercise}'")
+        st.write(f"🔍 DEBUG: metric_type = {metric_type}")
+        st.write(f"🔍 DEBUG: target_value = {target_value}")
+        st.write(f"🔍 DEBUG: target_date = {target_date}")
+        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -57,23 +64,30 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
+                st.write("🔍 DEBUG: About to INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
+                st.write("🔍 DEBUG: INSERT committed!")
+                
+                # Verify
+                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                count = cur.fetchone()[0]
+                st.write(f"🔍 DEBUG: You now have {count} goals")
+                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
                 st.balloons()
                 
-                # Refresh to show new goal
-                import time
-                time.sleep(0.5)
-                st.rerun()
+                st.warning("⚠️ Refresh disabled - manually refresh to see goal")
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
+                import traceback
+                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
@@ -84,6 +98,8 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
+    st.write(f"🔍 DEBUG: Fetching goals for user_id = {st.session_state.user_id}")
+    
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -92,6 +108,10 @@ def main():
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
+        
+        st.write(f"🔍 DEBUG: Found {len(rows)} rows")
+        if rows:
+            st.write(f"🔍 DEBUG: First row: {rows[0]}")
         
         if rows:
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
