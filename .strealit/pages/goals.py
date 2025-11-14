@@ -189,38 +189,31 @@ def main():
                 else:
                     st.write(f"🔍 DEBUG: Goal {goal_id} is in DISPLAY mode")
                     st.write(f"🔍 DEBUG: Exercise={row['exercise']}, Progress={row['Progress']}")
-                    # Display mode
-                    with st.container():
-                        col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 0.7, 0.7])
-                        with col1:
-                            st.markdown(f"**{row['exercise']}**")
-                        with col2:
-                            st.text(f"{row['metric_type']}: {row['target_value']}")
-                        with col3:
-                            st.text(f"Due: {row['target_date'].strftime('%Y-%m-%d')}")
-                        with col4:
-                            st.markdown(row['Progress'])
-                        with col5:
-                            # Edit button
-                            if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
-                                st.session_state.editing_goal_id = goal_id
+                    
+                    # Simplified display mode for testing
+                    st.markdown(f"**{row['exercise']}** - {row['metric_type']}: {row['target_value']} - Due: {row['target_date'].strftime('%Y-%m-%d')} - {row['Progress']}")
+                    
+                    col1, col2 = st.columns([0.1, 0.1])
+                    with col1:
+                        if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
+                            st.session_state.editing_goal_id = goal_id
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal"):
+                            conn_del = get_conn()
+                            cur_del = conn_del.cursor()
+                            try:
+                                cur_del.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (goal_id, st.session_state.user_id))
+                                conn_del.commit()
+                                st.success("Goal deleted!")
                                 st.rerun()
-                        with col6:
-                            # Delete button
-                            if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal"):
-                                conn_del = get_conn()
-                                cur_del = conn_del.cursor()
-                                try:
-                                    cur_del.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (goal_id, st.session_state.user_id))
-                                    conn_del.commit()
-                                    st.success("Goal deleted!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-                                finally:
-                                    cur_del.close()
-                                    conn_del.close()
-                        st.divider()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                            finally:
+                                cur_del.close()
+                                conn_del.close()
+                    
+                    st.divider()
                     st.write(f"🔍 DEBUG: Finished displaying goal {goal_id}")
         else:
             st.info("No goals yet. Add one above!")
