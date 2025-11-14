@@ -2,9 +2,29 @@
 import streamlit as st
 from datetime import date, timedelta
 import psycopg2
+import pandas as pd
 
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
+
+# ——— CACHE: FETCH GOALS ———
+@st.cache_data(ttl=60)  # Refresh every 60s
+def fetch_goals(user_id):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        return pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+    finally:
+        conn.close()
+
+# ——— CLEAR CACHE ON ADD ———
+def clear_goals_cache():
+    st.cache_data.clear()
 
 def main():
     st.markdown("## Goals")
@@ -41,7 +61,9 @@ def main():
                     )
                     conn.commit()
                     st.success("Goal added!")
-                    st.rerun()
+                    # Clear cache and force reload
+                    clear_goals_cache()
+                    st.session_state.goals_updated = True  # Trigger reload
                 except Exception as e:
                     conn.rollback()
                     st.error(f"Error: {e}")
@@ -49,18 +71,12 @@ def main():
                     conn.close()
 
     # ——— DISPLAY GOALS ———
-    conn = get_conn()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
-            (st.session_state.user_id,)
-        )
-        rows = cur.fetchall()
-        import pandas as pd
-        df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
-    finally:
-        conn.close()
+    # Force reload if just added
+    if st.session_state.get("goals_updated"):
+        del st.session_state.goals_updated
+        st.rerun()
+
+    df = fetch_goals(st.session_state.user_id)
 
     if not df.empty:
         df["Days Left"] = (df["target_date"] - date.today()).dt.days
