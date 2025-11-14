@@ -1,80 +1,59 @@
-# pages/03_Goals.py
+# .strealit/pages/03_Goals.py
 import streamlit as st
 import psycopg2
-from datetime import date
+from datetime import date, timedelta  # ← CORRECT IMPORT
+import pandas as pd
 
-# ——— DATABASE ———
-def conn():
+# ——— DATABASE CONNECTION ———
+def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— PAGE ———
-st.set_page_config(page_title="Goals - SOPHIA", layout="wide")
-st.title("Set Your Goals")
+# ——— FETCH GOALS ———
+def get_goals():
+    conn = get_conn()
+    df = pd.read_sql(
+        "SELECT exercise, metric_type, target_value, target_date FROM goals WHERE user_id=%s ORDER BY target_date",
+        conn,
+        params=(st.session_state.user_id,)
+    )
+    conn.close()
+    return df
+
+# ——— MAIN ———
+st.title("Goals")
 
 # ——— ADD GOAL FORM ———
 with st.form("add_goal"):
-    st.write("### Add a New Goal")
     col1, col2 = st.columns(2)
     with col1:
-        exercise = st.text_input("Exercise", placeholder="e.g. Run, Squat, Push-up")
-        metric = st.selectbox(
-            "Metric",
-            ["Time (min)", "Reps", "Weight (lbs)", "Distance (mi)"]
-        )
+        exercise = st.text_input("Exercise")
+        metric_type = st.selectbox("Metric", ["time_min", "reps", "weight_lbs", "distance_mi"])
     with col2:
         target_value = st.number_input("Target Value", min_value=0.0, step=0.1)
-        target_date = st.date_input("Target Date", value=date.today() + st.timedelta(days=30))
+        target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))  # ← FIXED
 
     submitted = st.form_submit_button("Add Goal", use_container_width=True)
-    
     if submitted:
-        if not exercise.strip():
-            st.error("Please enter an exercise.")
-        elif target_value <= 0:
-            st.error("Target value must be greater than 0.")
+        if not exercise:
+            st.error("Enter an exercise.")
         else:
-            metric_map = {
-                "Time (min)": "time_min",
-                "Reps": "reps",
-                "Weight (lbs)": "weight_lbs",
-                "Distance (mi)": "distance_mi"
-            }
-            metric_type = metric_map[metric]
-            
-            c = conn()
-            cur = c.cursor()
+            conn = get_conn()
+            cur = conn.cursor()
             cur.execute(
-                """INSERT INTO goals 
-                   (user_id, exercise, metric_type, target_value, target_date)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (st.session_state.user_id, exercise.strip().title(), metric_type, target_value, target_date)
+                "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                (st.session_state.user_id, exercise, metric_type, target_value, target_date)
             )
-            c.commit()
-            c.close()
-            st.success(f"Goal added: **{exercise} → {target_value} {metric}** by **{target_date}**")
-            st.balloons()
+            conn.commit()
+            conn.close()
+            st.success("Goal added!")
+            st.rerun()
 
-# ——— CURRENT GOALS ———
-c = conn()
-cur = c.cursor()
-cur.execute(
-    """SELECT exercise, metric_type, target_value, target_date 
-       FROM goals WHERE user_id = %s ORDER BY target_date ASC""",
-    (st.session_state.user_id,)
-)
-goals = cur.fetchall()
-c.close()
-
-if goals:
-    st.subheader("Your Active Goals")
-    for ex, mt, tv, td in goals:
-        metric_label = mt.replace("_", " ").title()
-        days_left = (td - date.today()).days
-        color = "🟢" if days_left > 14 else "🟡" if days_left > 0 else "🔴"
-        st.markdown(f"{color} **{ex}** → **{tv} {metric_label}** by **{td}** ({days_left} days left)")
+# ——— DISPLAY GOALS ———
+df = get_goals()
+if not df.empty:
+    st.subheader("Your Goals")
+    df["Days Left"] = (df["target_date"] - date.today()).dt.days
+    df = df[["exercise", "metric_type", "target_value", "target_date", "Days Left"]]
+    st.dataframe(df, use_container_width=True)
 else:
-    st.info("No goals yet. Add one above to get started!")
-
-# ——— PROGRESS TIP ———
-if goals:
-    st.caption("SOPHIA will analyze your progress in the **AI Coach** tab.")
+    st.info("No goals yet. Add one above!")
