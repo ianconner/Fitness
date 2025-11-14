@@ -1,4 +1,4 @@
-# app.py
+# .strealit/app.py
 import streamlit as st
 import psycopg2
 import os
@@ -7,7 +7,6 @@ import os
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— FORCE RECREATE DATABASE (EVERY START) ———
 # ——— INITIALIZE DATABASE (EMBEDDED SCHEMA) ———
 def init_db():
     conn = get_conn()
@@ -68,10 +67,10 @@ def init_db():
     conn.close()
 
 # ——— RUN INIT_DB ON EVERY LOAD ———
-init_db()  # This runs every time the app starts
+init_db()
 
 # ——— SESSION STATE ———
-for key in ['logged_in', 'user_id', 'username', 'role']:
+for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in']:
     if key not in st.session_state:
         st.session_state[key] = None
 st.session_state.logged_in = st.session_state.user_id is not None
@@ -79,13 +78,19 @@ st.session_state.logged_in = st.session_state.user_id is not None
 # ——— SIDEBAR ———
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
-    st.sidebar.page_link("../app.py", label="Home")
+    
+    # Home Button (not page_link)
+    if st.sidebar.button("Home", use_container_width=True):
+        st.switch_page("../app.py")
+    
+    # Page Links (must be in pages/)
     st.sidebar.page_link("../pages/01_Dashboard.py", label="Dashboard")
     st.sidebar.page_link("../pages/02_Log_Workout.py", label="Log Workout")
     st.sidebar.page_link("../pages/03_Goals.py", label="Goals")
     st.sidebar.page_link("../pages/04_AI_Coach.py", label="SOPHIA Coach")
     if st.session_state.role == 'admin':
         st.sidebar.page_link("../pages/05_Admin.py", label="Admin")
+    
     if st.sidebar.button("Logout", use_container_width=True):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
@@ -121,7 +126,7 @@ if not st.session_state.logged_in:
                         st.session_state.username = user[1]
                         st.session_state.role = user[2]
                         st.session_state.logged_in = True
-                        st.success("Logged in!")
+                        st.session_state.just_logged_in = True  # Flag
                         st.rerun()
                     else:
                         st.error("Invalid username or password")
@@ -145,11 +150,12 @@ if not st.session_state.logged_in:
                         )
                         user = cur.fetchone()
                         conn.commit()
-                        st.success(f"Account created for **{user[1]}**! Please log in.")
+                        st.success(f"Account created for **{user[1]}**! Please log like a boss.")
                     except psycopg2.IntegrityError:
                         st.error("Username already taken.")
                     finally:
                         conn.close()
+
 else:
     # ——— DELAY SIDEBAR UNTIL AFTER RERUN ———
     if st.session_state.get("just_logged_in"):
