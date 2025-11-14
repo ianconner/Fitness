@@ -22,8 +22,6 @@ def init_db():
 
         UPDATE users SET role = 'user' WHERE role IS NULL;
 
-        DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
-
         CREATE TABLE IF NOT EXISTS goals (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -57,16 +55,14 @@ def init_db():
         """
         cur.execute(schema_sql)
         conn.commit()
-        st.success("Database schema initialized!")
+        st.success("Database schema initialized!")  # This will only show on first run now
     except Exception as e:
         conn.rollback()
         st.error(f"Schema error: {e}")
     finally:
         cur.close()
         conn.close()
-
-init_db()
-
+        
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page', 'goals_updated']:
     if key not in st.session_state:
