@@ -8,7 +8,7 @@ engine = create_engine(st.secrets["POSTGRES_URL"])
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE (PURE psycopg2 — NO SQLALCHEMY) ———
+# ——— INITIALIZE DATABASE (PURE psycopg2 — NO PARAMS) ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -64,7 +64,9 @@ def init_db():
     finally:
         cur.close()
         conn.close()
-        
+
+init_db()
+
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page']:
     if key not in st.session_state:
@@ -75,13 +77,15 @@ st.session_state.logged_in = st.session_state.user_id is not None
 if st.session_state.logged_in and st.session_state.username == "ianconner" and st.session_state.role != "admin":
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET role='admin' WHERE username='ianconner'")
-    conn.commit()
-    conn.close()
-    st.session_state.role = 'admin'
+    try:
+        cur.execute("UPDATE users SET role='admin' WHERE username='ianconner'")
+        conn.commit()
+        st.session_state.role = 'admin'
+    finally:
+        conn.close()
     st.rerun()
 
-# ——— RISE SIDEBAR: CLEAN, BOLD, NO DUPLICATES ———
+# ——— RISE SIDEBAR ———
 def render_sidebar():
     st.markdown("""
     <style>
@@ -90,7 +94,6 @@ def render_sidebar():
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 { display: none !important; }
-
     .sidebar .stButton > button {
         background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
         color: white !important;
@@ -168,21 +171,23 @@ if not st.session_state.logged_in:
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
-                    cur.execute(
-                        "SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
-                        (username, password)
-                    )
-                    user = cur.fetchone()
-                    conn.close()
-                    if user:
-                        st.session_state.update(dict(zip(['user_id','username','role'], user)))
-                        st.session_state.logged_in = True
-                        st.session_state.just_logged_in = True
-                        st.session_state.current_page = "home"
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials")
-    with tab2:
+                    try:
+                        cur.execute(
+                            "SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
+                            (username, password)
+                        )
+                        user = cur.fetchone()
+                        if user:
+                            st.session_state.update(dict(zip(['user_id','username','role'], user)))
+                            st.session_state.logged_in = True
+                            st.session_state.just_logged_in = True
+                            st.session_state.current_page = "home"
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+                    finally:
+                        conn.close()
+    with tab1:
         with st.form("main_signup_form"):
             st.write("### Signup")
             new_user = st.text_input("Username", key="main_signup_user")
@@ -194,12 +199,16 @@ if not st.session_state.logged_in:
                     conn = get_conn()
                     cur = conn.cursor()
                     try:
-                        cur.execute("INSERT INTO users (username,password,role) VALUES (%s,%s,'user') RETURNING id,username", (new_user,new_pass))
+                        cur.execute(
+                            "INSERT INTO users (username,password,role) VALUES (%s,%s,'user') RETURNING id,username",
+                            (new_user, new_pass)
+                        )
                         user = cur.fetchone()
                         conn.commit()
                         st.success(f"Created {user[1]}! Log in.")
                     except psycopg2.IntegrityError:
                         st.error("Username taken.")
+                        conn.rollback()
                     finally:
                         conn.close()
 else:
