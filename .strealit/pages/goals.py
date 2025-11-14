@@ -59,9 +59,10 @@ def main():
                     conn.rollback()
                     st.error(f"Error: {e}")
                 finally:
+                    cur.close()
                     conn.close()
 
-    # ——— FETCH AND DISPLAY GOALS (NO CACHE) ———
+    # ——— FETCH AND DISPLAY GOALS ———
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -72,6 +73,7 @@ def main():
         rows = cur.fetchall()
         df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
     finally:
+        cur.close()
         conn.close()
 
     if not df.empty:
@@ -93,4 +95,4 @@ def main():
     else:
         st.info("No goals yet. Add one above!")
 
-main()
+# DO NOT call main() here - it should only be called from app.py
