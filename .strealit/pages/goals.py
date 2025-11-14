@@ -47,37 +47,62 @@ def main():
                 conn = get_conn()
                 cur = conn.cursor()
                 try:
+                    # Debug: Show what we're trying to insert
+                    st.write(f"DEBUG: Inserting - user_id={st.session_state.user_id}, exercise={exercise}, metric={metric_type}, value={target_value}, date={target_date}")
+                    
                     cur.execute(
                         "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                         (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                     )
                     conn.commit()
-                    st.success("Goal added!")
-                    # Force a rerun to show the new goal
-                    st.rerun()
+                    st.success("Goal added successfully!")
+                    
+                    # Verify it was inserted
+                    cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                    count = cur.fetchone()[0]
+                    st.write(f"DEBUG: You now have {count} total goals")
+                    
                 except Exception as e:
                     conn.rollback()
-                    st.error(f"Error: {e}")
+                    st.error(f"Database Error: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
                 finally:
                     cur.close()
                     conn.close()
 
     # ——— FETCH AND DISPLAY GOALS ———
+    st.subheader("Your Goals")
+    
     conn = get_conn()
     cur = conn.cursor()
     try:
+        # Debug: Check user_id
+        st.write(f"DEBUG: Fetching goals for user_id={st.session_state.user_id}")
+        
         cur.execute(
             "SELECT id, exercise, metric_type, target_value, target_date, created_at FROM goals WHERE user_id=%s ORDER BY target_date",
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
+        
+        # Debug: Show raw data
+        st.write(f"DEBUG: Found {len(rows)} goals")
+        if rows:
+            st.write("DEBUG: Raw data:", rows)
+        
         df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
+    except Exception as e:
+        st.error(f"Error fetching goals: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        df = pd.DataFrame()
     finally:
         cur.close()
         conn.close()
 
     if not df.empty:
-        df["Days Left"] = (df["target_date"] - date.today()).dt.days
+        df["Days Left"] = (df["target_date"] - pd.Timestamp(date.today())).dt.days
         df["Progress"] = df["Days Left"].apply(
             lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue"
         )
@@ -94,5 +119,14 @@ def main():
         )
     else:
         st.info("No goals yet. Add one above!")
-
-# DO NOT call main() here - it should only be called from app.py
+        
+        # Debug: Check if ANY goals exist in the table
+        conn2 = get_conn()
+        cur2 = conn2.cursor()
+        try:
+            cur2.execute("SELECT COUNT(*) FROM goals")
+            total_goals = cur2.fetchone()[0]
+            st.write(f"DEBUG: Total goals in database (all users): {total_goals}")
+        finally:
+            cur2.close()
+            conn2.close()
