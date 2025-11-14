@@ -150,8 +150,13 @@ if not st.session_state.logged_in:
                         st.error("Username already taken.")
                     finally:
                         conn.close()
-
 else:
+    # ——— DELAY SIDEBAR UNTIL AFTER RERUN ———
+    if st.session_state.get("just_logged_in"):
+        del st.session_state["just_logged_in"]
+        st.success("Logged in!")
+        st.rerun()
+
     sidebar()
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
