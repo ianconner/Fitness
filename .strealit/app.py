@@ -1,7 +1,6 @@
 # .strealit/app.py
 import streamlit as st
 import psycopg2
-import os
 
 # ——— DATABASE CONNECTION ———
 def get_conn():
@@ -12,22 +11,18 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
     
-    # Embedded schema SQL (no file dependency)
     schema_sql = """
-    -- Add 'role' column if missing
     DO $$
     BEGIN
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
             ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
         END IF;
     END $$;
-    
-    -- Ensure all users have role
+
     UPDATE users SET role = 'user' WHERE role IS NULL;
-    
-    -- Drop and recreate other tables
+
     DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
-    
+
     CREATE TABLE goals (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -37,7 +32,7 @@ def init_db():
         target_date DATE NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
     );
-    
+
     CREATE TABLE workouts (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -46,7 +41,7 @@ def init_db():
         duration_min INTEGER,
         created_at TIMESTAMP DEFAULT NOW()
     );
-    
+
     CREATE TABLE workout_exercises (
         id SERIAL PRIMARY KEY,
         workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
@@ -62,7 +57,6 @@ def init_db():
     
     cur.execute(schema_sql)
     st.success("Database schema embedded and loaded!")
-    
     conn.commit()
     conn.close()
 
@@ -79,17 +73,19 @@ st.session_state.logged_in = st.session_state.user_id is not None
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     
-    # Home Button (not page_link)
     if st.sidebar.button("Home", use_container_width=True):
         st.switch_page("../app.py")
-    
-    # Page Links (must be in pages/)
-    st.sidebar.page_link("../pages/01_Dashboard.py", label="Dashboard")
-    st.sidebar.page_link("../pages/02_Log_Workout.py", label="Log Workout")
-    st.sidebar.page_link("../pages/03_Goals.py", label="Goals")
-    st.sidebar.page_link("../pages/04_AI_Coach.py", label="SOPHIA Coach")
+    if st.sidebar.button("Dashboard", use_container_width=True):
+        st.switch_page("../pages/01_Dashboard.py")
+    if st.sidebar.button("Log Workout", use_container_width=True):
+        st.switch_page("../pages/02_Log_Workout.py")
+    if st.sidebar.button("Goals", use_container_width=True):
+        st.switch_page("../pages/03_Goals.py")
+    if st.sidebar.button("SOPHIA Coach", use_container_width=True):
+        st.switch_page("../pages/04_AI_Coach.py")
     if st.session_state.role == 'admin':
-        st.sidebar.page_link("../pages/05_Admin.py", label="Admin")
+        if st.sidebar.button("Admin", use_container_width=True):
+            st.switch_page("../pages/05_Admin.py")
     
     if st.sidebar.button("Logout", use_container_width=True):
         for k in list(st.session_state.keys()):
@@ -126,7 +122,7 @@ if not st.session_state.logged_in:
                         st.session_state.username = user[1]
                         st.session_state.role = user[2]
                         st.session_state.logged_in = True
-                        st.session_state.just_logged_in = True  # Flag
+                        st.session_state.just_logged_in = True
                         st.rerun()
                     else:
                         st.error("Invalid username or password")
@@ -150,14 +146,14 @@ if not st.session_state.logged_in:
                         )
                         user = cur.fetchone()
                         conn.commit()
-                        st.success(f"Account created for **{user[1]}**! Please log like a boss.")
+                        st.success(f"Account created for **{user[1]}**! Please log in.")
                     except psycopg2.IntegrityError:
                         st.error("Username already taken.")
                     finally:
                         conn.close()
 
 else:
-    # ——— DELAY SIDEBAR UNTIL AFTER RERUN ———
+    # ——— DELAY SUCCESS MESSAGE ———
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.success("Logged in!")
@@ -168,7 +164,7 @@ else:
     st.info("Use the sidebar to navigate.")
 
     # ——— ADMIN PROMOTION BUTTON ———
-    if st.session_state.username == "ianconner":  # CHANGE TO YOUR USERNAME
+    if st.session_state.username == "ianconner":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### DEV MODE")
         if st.sidebar.button("PROMOTE TO ADMIN", type="primary", use_container_width=True):
