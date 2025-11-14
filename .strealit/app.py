@@ -8,40 +8,63 @@ engine = create_engine(st.secrets["POSTGRES_URL"])
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE ———
+# ——— INITIALIZE DATABASE (PURE psycopg2 — NO SQLALCHEMY) ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
-    schema_sql = """
-    DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
-            ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
-        END IF;
-    END $$;
-    UPDATE users SET role = 'user' WHERE role IS NULL;
-    DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
-    CREATE TABLE goals (
-        id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        exercise TEXT NOT NULL, metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min','reps','weight_lbs','distance_mi')),
-        target_value NUMERIC NOT NULL, target_date DATE NOT NULL, created_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE TABLE workouts (
-        id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        workout_date DATE NOT NULL, notes TEXT NOT NULL, duration_min INTEGER, created_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE TABLE workout_exercises (
-        id SERIAL PRIMARY KEY, workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
-        exercise TEXT NOT NULL, sets INTEGER, reps INTEGER, weight_lbs NUMERIC,
-        time_min NUMERIC, rest_min NUMERIC, distance_mi NUMERIC
-    );
-    """
-    cur.execute(schema_sql)
-    st.success("Database schema loaded!")
-    conn.commit()
-    conn.close()
+    try:
+        schema_sql = """
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
+                ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
+            END IF;
+        END $$;
 
-init_db()
+        UPDATE users SET role = 'user' WHERE role IS NULL;
 
+        DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
+
+        CREATE TABLE IF NOT EXISTS goals (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            exercise TEXT NOT NULL,
+            metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min','reps','weight_lbs','distance_mi')),
+            target_value NUMERIC NOT NULL,
+            target_date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS workouts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            workout_date DATE NOT NULL,
+            notes TEXT NOT NULL,
+            duration_min INTEGER,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS workout_exercises (
+            id SERIAL PRIMARY KEY,
+            workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
+            exercise TEXT NOT NULL,
+            sets INTEGER,
+            reps INTEGER,
+            weight_lbs NUMERIC,
+            time_min NUMERIC,
+            rest_min NUMERIC,
+            distance_mi NUMERIC
+        );
+        """
+        cur.execute(schema_sql)
+        conn.commit()
+        st.success("Database schema initialized!")
+    except Exception as e:
+        conn.rollback()
+        st.error(f"Schema error: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page']:
     if key not in st.session_state:
