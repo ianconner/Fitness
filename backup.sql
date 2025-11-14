@@ -1,1 +1,5 @@
-
+-- backup.sql - Run this in Aiven Console to export data
+-- COPY (SELECT * FROM users) TO STDOUT;
+-- COPY (SELECT * FROM workouts) TO STDOUT;
+-- COPY (SELECT * FROM goals) TO STDOUT;
+-- COPY (SELECT * FROM workout_exercises) TO STDOUT;
