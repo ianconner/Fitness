@@ -81,5 +81,3 @@ def main():
         st.dataframe(df_goals[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Status"]], use_container_width=True, hide_index=True)
     else:
         st.info("No active goals.")
-
-}
