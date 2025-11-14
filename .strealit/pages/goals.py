@@ -84,6 +84,8 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
+    st.write(f"🔍 DEBUG: Fetching for user_id={st.session_state.user_id}")
+    
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -93,7 +95,10 @@ def main():
         )
         rows = cur.fetchall()
         
+        st.write(f"🔍 DEBUG: Found {len(rows)} rows")
+        
         if rows:
+            st.write(f"🔍 DEBUG: First row: {rows[0]}")
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
             
             # Calculate days left
@@ -106,6 +111,8 @@ def main():
             # Display each goal
             for idx, row in df.iterrows():
                 goal_id = row['id']
+                
+                st.write(f"🔍 DEBUG: Processing goal_id={goal_id}, editing={st.session_state.editing_goal_id}")
                 
                 # Check if this goal is being edited
                 if st.session_state.editing_goal_id == goal_id:
@@ -159,12 +166,17 @@ def main():
                     
                     st.divider()
                 else:
+                    st.write(f"🔍 DEBUG: Displaying goal {goal_id}")
                     # Display mode - Simple layout that works
                     col_main, col_buttons = st.columns([5, 1])
+                    
+                    st.write(f"🔍 DEBUG: Created columns")
                     
                     with col_main:
                         st.markdown(f"### {row['exercise']}")
                         st.write(f"**{row['metric_type'].replace('_', ' ').title()}:** {row['target_value']} | **Due:** {row['target_date'].strftime('%b %d, %Y')} | **Status:** {row['Progress']}")
+                    
+                    st.write(f"🔍 DEBUG: Rendered main column")
                     
                     with col_buttons:
                         if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
@@ -185,7 +197,9 @@ def main():
                                 cur_del.close()
                                 conn_del.close()
                     
+                    st.write(f"🔍 DEBUG: Rendered buttons")
                     st.divider()
+                    st.write(f"🔍 DEBUG: Finished goal {goal_id}")
         else:
             st.info("No goals yet. Add one above!")
             
