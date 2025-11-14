@@ -1,39 +1,50 @@
 # pages/dashboard.py
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+import psycopg2
 from datetime import date
 import plotly.express as px
 
-# ——— DATABASE ENGINE ———
-engine = create_engine(st.secrets["POSTGRES_URL"])
+def get_conn():
+    return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
 def main():
     st.markdown("## Dashboard")
     st.markdown("Your fitness journey at a glance.")
 
-    # ——— FETCH WORKOUTS ———
-    def get_workouts():
-        return pd.read_sql("""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    try:
+        # === WORKOUTS ===
+        cur.execute("""
             SELECT w.workout_date, w.duration_min, w.notes,
                    we.exercise, we.sets, we.reps, we.weight_lbs, we.time_min, we.distance_mi
             FROM workouts w
             LEFT JOIN workout_exercises we ON w.id = we.workout_id
             WHERE w.user_id = %s
             ORDER BY w.workout_date DESC
-        """, engine, params=(st.session_state.user_id,))
+        """, (st.session_state.user_id,))
+        rows = cur.fetchall()
+        df_workouts = pd.DataFrame(rows, columns=[
+            'workout_date', 'duration_min', 'notes', 'exercise', 'sets', 'reps',
+            'weight_lbs', 'time_min', 'distance_mi'
+        ])
 
-    # ——— FETCH GOALS ———
-    def get_goals():
-        return pd.read_sql("""
+        # === GOALS ===
+        cur.execute("""
             SELECT exercise, metric_type, target_value, target_date
             FROM goals
             WHERE user_id = %s AND target_date >= %s
             ORDER BY target_date
-        """, engine, params=(st.session_state.user_id, date.today()))
+        """, (st.session_state.user_id, date.today()))
+        goals_rows = cur.fetchall()
+        df_goals = pd.DataFrame(goals_rows, columns=['exercise', 'metric_type', 'target_value', 'target_date'])
 
-    # ——— WORKOUT SUMMARY ———
-    df_workouts = get_workouts()
+    finally:
+        conn.close()
+
+    # === DISPLAY ===
     if not df_workouts.empty:
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -46,31 +57,20 @@ def main():
             avg_duration = df_workouts.groupby('workout_date')['duration_min'].sum().mean()
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
-        # ——— RECENT WORKOUTS ———
         st.subheader("Recent Workouts")
-        recent = df_workouts.head(10)
-        st.dataframe(recent[["workout_date", "exercise", "sets", "reps", "weight_lbs", "time_min", "distance_mi"]],
-                     use_container_width=True, hide_index=True)
+        st.dataframe(df_workouts.head(10)[["workout_date", "exercise", "sets", "reps", "weight_lbs"]], use_container_width=True, hide_index=True)
 
-        # ——— PROGRESS CHART ———
-        st.subheader("Workout Frequency")
         freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
-        freq['workout_date'] = pd.to_datetime(freq['workout_date'])
         fig = px.bar(freq, x='workout_date', y='count', title="Workouts per Day", color_discrete_sequence=["#00FF88"])
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No workouts yet. Log one to get started!")
+        st.info("No workouts yet.")
 
-    # ——— GOALS PROGRESS ———
-    df_goals = get_goals()
     if not df_goals.empty:
         st.subheader("Active Goals")
         df_goals["Days Left"] = (df_goals["target_date"] - date.today()).dt.days
-        df_goals["Status"] = df_goals["Days Left"].apply(
-            lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue"
-        )
-        df_goals = df_goals[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Status"]]
-        st.dataframe(df_goals, use_container_width=True, hide_index=True)
+        df_goals["Status"] = df_goals["Days Left"].apply(lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue")
+        st.dataframe(df_goals[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Status"]], use_container_width=True, hide_index=True)
     else:
-        st.info("No active goals. Set one in the Goals tab!")
+        st.info("No active goals.")
