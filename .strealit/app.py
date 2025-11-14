@@ -43,7 +43,7 @@ def init_db():
 init_db()
 
 # ——— SESSION STATE ———
-for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in']:
+for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page']:
     if key not in st.session_state:
         st.session_state[key] = None
 st.session_state.logged_in = st.session_state.user_id is not None
@@ -58,34 +58,38 @@ if st.session_state.logged_in and st.session_state.username == "ianconner" and s
     st.session_state.role = 'admin'
     st.rerun()
 
-# ——— STYLED SIDEBAR ———
+# ——— STUNNING SIDEBAR ———
 def render_sidebar():
     st.markdown("""
     <style>
     .sidebar .stButton > button {
-        background-color: #1E1E1E !important;
+        background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
         color: white !important;
         border: 1px solid #333 !important;
-        border-radius: 8px !important;
-        padding: 12px !important;
+        border-radius: 12px !important;
+        padding: 14px !important;
         font-weight: 600 !important;
-        margin: 8px 0 !important;
-        width: 100% !important;
         font-size: 16px !important;
-        transition: all 0.2s ease !important;
+        margin: 10px 0 !important;
+        width: 100% !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+        transition: all 0.3s ease !important;
     }
     .sidebar .stButton > button:hover {
-        background-color: #333 !important;
-        border-color: #555 !important;
-        transform: translateY(-1px) !important;
+        background: linear-gradient(135deg, #333, #444) !important;
+        border-color: #00FF88 !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 8px rgba(0,255,136,0.2) !important;
     }
     .sidebar .stSuccess {
-        background-color: #0A0A0A !important;
+        background: #0A0A0A !important;
         color: #00FF88 !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
+        border: 1px solid #00FF88 !important;
+        border-radius: 12px !important;
+        padding: 12px !important;
         text-align: center !important;
         font-weight: 700 !important;
+        font-size: 18px !important;
         margin-bottom: 20px !important;
     }
     </style>
@@ -118,7 +122,7 @@ def render_sidebar():
             del st.session_state[k]
         st.rerun()
 
-# ——— PAGE ROUTER ———
+# ——— LOGIN / SIGNUP ———
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
@@ -167,35 +171,34 @@ if not st.session_state.logged_in:
                     finally:
                         conn.close()
 else:
-    # ——— RENDER SIDEBAR ONCE ———
     render_sidebar()
 
-    # ——— SHOW WELCOME ON HOME ———
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.success("Logged in!")
         st.rerun()
 
-    # ——— PAGE ROUTING ———
-    if st.session_state.get("current_page") == "home":
+    page = st.session_state.get("current_page", "home")
+
+    if page == "home":
         st.markdown(f"## Welcome, **{st.session_state.username}**")
         st.info("Use the sidebar to navigate.")
     
-    elif st.session_state.get("current_page") == "dashboard":
-        import pages.01_Dashboard as page
-        page.main()
-    elif st.session_state.get("current_page") == "log_workout":
-        import pages.02_Log_Workout as page
-        page.main()
-    elif st.session_state.get("current_page") == "goals":
-        import pages.03_Goals as page
-        page.main()
-    elif st.session_state.get("current_page") == "ai_coach":
-        import pages.04_AI_Coach as page
-        page.main()
-    elif st.session_state.get("current_page") == "admin":
-        import pages.05_Admin as page
-        page.main()
+    elif page == "dashboard":
+        import pages.dashboard as p
+        p.main()
+    elif page == "log_workout":
+        import pages.log_workout as p
+        p.main()
+    elif page == "goals":
+        import pages.goals as p
+        p.main()
+    elif page == "ai_coach":
+        import pages.ai_coach as p
+        p.main()
+    elif page == "admin":
+        import pages.admin as p
+        p.main()
     else:
         st.session_state.current_page = "home"
         st.rerun()
