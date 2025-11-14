@@ -8,19 +8,61 @@ def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
 # ——— FORCE RECREATE DATABASE (EVERY START) ———
+# ——— INITIALIZE DATABASE (EMBEDDED SCHEMA) ———
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
     
-    # Read and execute schema.sql
-    schema_path = "../schema.sql"
-    if os.path.exists(schema_path):
-        with open(schema_path, "r") as f:
-            sql = f.read()
-            cur.execute(sql)
-        st.success("Database schema loaded from schema.sql")
-    else:
-        st.error("schema.sql not found!")
+    # Embedded schema SQL (no file dependency)
+    schema_sql = """
+    -- Add 'role' column if missing
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
+            ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
+        END IF;
+    END $$;
+    
+    -- Ensure all users have role
+    UPDATE users SET role = 'user' WHERE role IS NULL;
+    
+    -- Drop and recreate other tables
+    DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
+    
+    CREATE TABLE goals (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        exercise TEXT NOT NULL,
+        metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min', 'reps', 'weight_lbs', 'distance_mi')),
+        target_value NUMERIC NOT NULL,
+        target_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    CREATE TABLE workouts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        workout_date DATE NOT NULL,
+        notes TEXT NOT NULL,
+        duration_min INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    CREATE TABLE workout_exercises (
+        id SERIAL PRIMARY KEY,
+        workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
+        exercise TEXT NOT NULL,
+        sets INTEGER,
+        reps INTEGER,
+        weight_lbs NUMERIC,
+        time_min NUMERIC,
+        rest_min NUMERIC,
+        distance_mi NUMERIC
+    );
+    """
+    
+    cur.execute(schema_sql)
+    st.success("Database schema embedded and loaded!")
     
     conn.commit()
     conn.close()
