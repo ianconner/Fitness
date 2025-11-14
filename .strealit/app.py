@@ -13,7 +13,7 @@ def init_db():
     cur = conn.cursor()
     
     # Read and execute schema.sql
-    schema_path = "schema.sql"
+    schema_path = "../schema.sql"
     if os.path.exists(schema_path):
         with open(schema_path, "r") as f:
             sql = f.read()
