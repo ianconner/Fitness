@@ -90,7 +90,6 @@ def main():
                 
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
-                st.balloons()
                 
                 st.warning("⚠️ Auto-refresh disabled - manually refresh page")
                 
