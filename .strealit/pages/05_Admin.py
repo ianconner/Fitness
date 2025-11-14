@@ -1,111 +1,73 @@
-# pages/05_Admin.py
+# .strealit/pages/05_Admin.py
 import streamlit as st
 import psycopg2
 import pandas as pd
 
-# ——— DATABASE ———
-def conn():
+# ——— DATABASE CONNECTION ———
+def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— ADMIN CHECK ———
+# ——— CHECK ADMIN ———
 if st.session_state.role != 'admin':
-    st.error("Access Denied. Admin only.")
+    st.error("Access denied.")
     st.stop()
 
-# ——— PAGE ———
-st.set_page_config(page_title="Admin - SOPHIA", layout="wide")
-st.title("SOPHIA Admin Panel")
+st.markdown("## Admin Panel")
+st.markdown("Manage users, reset passwords, and modify data.")
 
-# ——— USER OVERVIEW ———
-c = conn()
-users_df = pd.read_sql("""
-    SELECT 
-        id, 
-        username, 
-        created_at::date as joined,
-        role
-    FROM users 
-    ORDER BY created_at DESC
-""", c)
+# ——— USER LIST ———
+conn = get_conn()
+users = pd.read_sql("SELECT id, username, role FROM users", conn)
+conn.close()
 
-workouts_per_user = pd.read_sql("""
-    SELECT 
-        u.username,
-        COUNT(w.id) as total_workouts,
-        SUM(w.duration_min) as total_minutes
-    FROM users u
-    LEFT JOIN workouts w ON u.id = w.user_id
-    GROUP BY u.id, u.username
-    ORDER BY total_workouts DESC
-""", c)
+selected_user = st.selectbox("Select User", users["username"])
+user_row = users[users["username"] == selected_user].iloc[0]
 
-goals_per_user = pd.read_sql("""
-    SELECT 
-        u.username,
-        COUNT(g.id) as active_goals
-    FROM users u
-    LEFT JOIN goals g ON u.id = g.user_id
-    GROUP BY u.id, u.username
-""", c)
-c.close()
-
-# Merge stats
-stats = users_df.merge(workouts_per_user, on='username', how='left') \
-                .merge(goals_per_user, on='username', how='left') \
-                .fillna({'total_workouts': 0, 'total_minutes': 0, 'active_goals': 0})
-
-st.subheader("User Activity Dashboard")
-st.dataframe(stats, use_container_width=True)
-
-# ——— SYSTEM STATS ———
-col1, col2, col3, col4 = st.columns(4)
+# ——— USER ACTIONS ———
+col1, col2 = st.columns(2)
 with col1:
-    st.metric("Total Users", len(stats))
+    if st.button("Reset Password", use_container_width=True):
+        new_pass = st.text_input("New Password", type="password", key="reset_pass")
+        if st.button("Confirm Reset"):
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET password=%s WHERE id=%s", (new_pass, user_row["id"]))
+            conn.commit()
+            conn.close()
+            st.success(f"Password reset for **{selected_user}**")
+            st.rerun()
+
 with col2:
-    st.metric("Active Users", len(stats[stats['total_workouts'] > 0]))
-with col3:
-    st.metric("Total Workouts", int(stats['total_workouts'].sum()))
-with col4:
-    st.metric("Total Goals", int(stats['active_goals'].sum()))
+    new_role = st.selectbox("Change Role", ["user", "admin"], index=0 if user_row["role"] == "user" else 1)
+    if st.button("Update Role", use_container_width=True):
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET role=%s WHERE id=%s", (new_role, user_row["id"]))
+        conn.commit()
+        conn.close()
+        st.success(f"Role updated to **{new_role}**")
+        st.rerun()
 
-# ——— RECENT ACTIVITY LOG ———
-st.subheader("Latest Workouts (All Users)")
-c = conn()
-recent = pd.read_sql("""
-    SELECT 
-        u.username,
-        w.workout_date,
-        w.notes
-    FROM workouts w
-    JOIN users u ON w.user_id = u.id
-    ORDER BY w.workout_date DESC, w.created_at DESC
-    LIMIT 20
-""", c)
-c.close()
+# ——— DELETE USER ———
+if st.button("Delete User (Irreversible)", type="secondary", use_container_width=True):
+    if st.checkbox("I understand this deletes all data"):
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users WHERE id=%s", (user_row["id"],))
+        conn.commit()
+        conn.close()
+        st.success(f"User **{selected_user}** deleted.")
+        st.rerun()
 
-if not recent.empty:
-    for _, row in recent.iterrows():
-        st.caption(f"**{row['username']}** — {row['workout_date']}")
-        st.code(row['notes'], language=None)
-else:
-    st.info("No workouts logged yet.")
-
-# ——— MAKE ADMIN (MANUAL) ———
-st.sidebar.markdown("### Admin Tools")
-with st.sidebar.form("make_admin"):
-    st.write("Promote User to Admin")
-    target_user = st.text_input("Username")
-    promote = st.form_submit_button("Make Admin")
-    if promote:
-        if target_user:
-            c = conn()
-            cur = c.cursor()
-            cur.execute("UPDATE users SET role = 'admin' WHERE LOWER(username) = LOWER(%s)", (target_user,))
-            if cur.rowcount > 0:
-                c.commit()
-                st.success(f"**{target_user}** is now admin.")
-            else:
-                st.error("User not found.")
-            c.close()
-        else:
-            st.error("Enter a username.")
+# ——— RAW DB VIEW ———
+st.markdown("### Raw Database")
+tab1, tab2, tab3 = st.tabs(["Users", "Workouts", "Goals"])
+with tab1:
+    df_users = pd.read_sql("SELECT * FROM users", get_conn())
+    st.dataframe(df_users)
+with tab2:
+    df_workouts = pd.read_sql("SELECT * FROM workouts", get_conn())
+    st.dataframe(df_workouts)
+with tab3:
+    df_goals = pd.read_sql("SELECT * FROM goals", get_conn())
+    st.dataframe(df_goals)
