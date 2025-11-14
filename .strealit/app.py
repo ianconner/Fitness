@@ -48,7 +48,7 @@ if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
     
-tab1, tab2 = st.tabs(["Login", "Signup"])
+    tab1, tab2 = st.tabs(["Login", "Signup"])
 
     with tab1:
         with st.form("login_form"):
@@ -103,16 +103,21 @@ tab1, tab2 = st.tabs(["Login", "Signup"])
                     finally:
                         conn.close()
 
-# ——— TEMPORARY ADMIN SETUP (REMOVE AFTER USE) ———
-if st.secrets.get("ADMIN_SETUP") == "true":
-    st.sidebar.markdown("---")
-    st.sidebar.warning("TEMP: Admin Setup Active")
-    if st.sidebar.button("MAKE ME ADMIN (ONE-TIME)", type="primary"):
-        c = conn()
-        cur = c.cursor()
-        cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
-        c.commit()
-        c.close()
-        st.session_state.role = 'admin'
-        st.sidebar.success("You are now ADMIN!")
-        st.balloons()
+else:
+    sidebar()
+    st.markdown(f"## Welcome, **{st.session_state.username}**")
+    st.info("Use the sidebar to navigate.")
+
+    # ——— TEMPORARY ADMIN SETUP (REMOVE AFTER USE) ———
+    if st.secrets.get("ADMIN_SETUP") == "true":
+        st.sidebar.markdown("---")
+        st.sidebar.warning("TEMP: Admin Setup Active")
+        if st.sidebar.button("MAKE ME ADMIN (ONE-TIME)", type="primary"):
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
+            conn.commit()
+            conn.close()
+            st.session_state.role = 'admin'
+            st.sidebar.success("You are now ADMIN!")
+            st.balloons()
