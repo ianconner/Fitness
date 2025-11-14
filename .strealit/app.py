@@ -8,6 +8,10 @@ engine = create_engine(st.secrets["POSTGRES_URL"])
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
+if 'db_initialized' not in st.session_state:
+    init_db()
+    st.session_state.db_initialized = True
+
 # ——— INITIALIZE DATABASE ———
 def init_db():
     conn = get_conn()
