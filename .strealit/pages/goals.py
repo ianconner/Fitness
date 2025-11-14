@@ -32,24 +32,41 @@ def main():
         st.caption(f"**Pace: {pace:.2f} min/mi**")
 
     if st.button("Add Goal", type="primary", use_container_width=True):
+        st.write(f"🔍 DEBUG: Button clicked!")
+        st.write(f"🔍 DEBUG: user_id = {st.session_state.user_id}")
+        st.write(f"🔍 DEBUG: exercise = '{exercise}'")
+        st.write(f"🔍 DEBUG: metric_type = {metric_type}")
+        st.write(f"🔍 DEBUG: target_value = {target_value}")
+        st.write(f"🔍 DEBUG: target_date = {target_date}")
+        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
         else:
             conn = get_conn()
             cur = conn.cursor()
             try:
+                st.write("🔍 DEBUG: About to INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
+                st.write("🔍 DEBUG: INSERT committed!")
+                
+                # Verify it's there
+                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                count = cur.fetchone()[0]
+                st.write(f"🔍 DEBUG: You now have {count} goals in database")
+                
                 st.success(f"✓ Goal added: {exercise}")
                 st.balloons()
                 # Force refresh
                 st.rerun()
             except Exception as e:
                 conn.rollback()
-                st.error(f"Error: {e}")
+                st.error(f"❌ Database Error: {e}")
+                import traceback
+                st.code(traceback.format_exc())
             finally:
                 cur.close()
                 conn.close()
@@ -59,6 +76,8 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
+    st.write(f"🔍 DEBUG: Loading goals for user_id = {st.session_state.user_id}")
+    
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -67,6 +86,10 @@ def main():
             (st.session_state.user_id,)
         )
         rows = cur.fetchall()
+        
+        st.write(f"🔍 DEBUG: Found {len(rows)} rows")
+        if rows:
+            st.write(f"🔍 DEBUG: First row = {rows[0]}")
         
         if rows:
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
