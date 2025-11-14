@@ -29,15 +29,18 @@ def main():
     with col2:
         if metric_type == "time_min":
             distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0, key="goal_distance")
-        target_value = st.number_input("Target Value", min_value=0.1, step=0.1, value=10.0, key="goal_value")
+            target_value = st.number_input("Time (min)", min_value=0.1, step=0.5, value=18.0, key="goal_value")
+            pace = target_value / distance
+            st.caption(f"**Pace: {pace:.2f} min/mi**")
+        elif metric_type == "reps":
+            target_value = st.number_input("Reps", min_value=1.0, step=1.0, value=10.0, key="goal_value")
+        elif metric_type == "weight_lbs":
+            target_value = st.number_input("Weight (lbs)", min_value=0.1, step=5.0, value=135.0, key="goal_value")
+        else:  # distance_mi
+            target_value = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=5.0, key="goal_value")
     
     with col3:
         target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30), key="goal_date")
-    
-    # Show calculated pace for time_min
-    if metric_type == "time_min" and 'goal_distance' in st.session_state:
-        pace = target_value / st.session_state.goal_distance
-        st.caption(f"**Pace: {pace:.2f} min/mi**")
 
     # Button with callback
     def handle_submit():
@@ -117,7 +120,15 @@ def main():
                                                    index=["time_min", "reps", "weight_lbs", "distance_mi"].index(row['metric_type']),
                                                    key=f"edit_metric_{goal_id}")
                     with col2:
-                        edit_value = st.number_input("Target Value", value=float(row['target_value']), key=f"edit_val_{goal_id}")
+                        if edit_metric == "time_min":
+                            st.text_input("Distance (mi)", value="2.0", disabled=True, help="For pace calculation")
+                            edit_value = st.number_input("Time (min)", value=float(row['target_value']), min_value=0.1, step=0.1, key=f"edit_val_{goal_id}")
+                        elif edit_metric == "reps":
+                            edit_value = st.number_input("Reps", value=float(row['target_value']), min_value=1.0, step=1.0, key=f"edit_val_{goal_id}")
+                        elif edit_metric == "weight_lbs":
+                            edit_value = st.number_input("Weight (lbs)", value=float(row['target_value']), min_value=0.1, step=5.0, key=f"edit_val_{goal_id}")
+                        else:  # distance_mi
+                            edit_value = st.number_input("Distance (mi)", value=float(row['target_value']), min_value=0.1, step=0.1, key=f"edit_val_{goal_id}")
                     with col3:
                         edit_date = st.date_input("Target Date", value=row['target_date'].date(), key=f"edit_date_{goal_id}")
                     
