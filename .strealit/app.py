@@ -48,7 +48,7 @@ if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
     
-       tab1, tab2 = st.tabs(["Login", "Signup"])
+tab1, tab2 = st.tabs(["Login", "Signup"])
 
     with tab1:
         with st.form("login_form"):
