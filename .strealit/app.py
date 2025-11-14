@@ -46,7 +46,7 @@ init_db()
 for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page']:
     if key not in st.session_state:
         st.session_state[key] = None
-st.session_state.logged_in = st.session_state.user_id is not None
+st.session_session.logged_in = st.session_state.user_id is not None
 
 # ——— AUTO-PROMOTE ianconner TO ADMIN ———
 if st.session_state.logged_in and st.session_state.username == "ianconner" and st.session_state.role != "admin":
@@ -58,27 +58,16 @@ if st.session_state.logged_in and st.session_state.username == "ianconner" and s
     st.session_state.role = 'admin'
     st.rerun()
 
-# ——— GORGEOUS SIDEBAR: KILL AUTO-NAV, KEEP OUR BUTTONS ———
+# ——— RISE SIDEBAR: CLEAN, BOLD, NO DUPLICATES ———
 def render_sidebar():
-    # === PRECISE CSS: HIDE ONLY STREAMLIT'S AUTO-GENERATED NAVIGATION ===
     st.markdown("""
     <style>
-    /* HIDE STREAMLIT'S AUTO PAGE NAVIGATION */
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-    /* HIDE ANY ?page= URL LINKS */
-    a[href*="?page="] {
-        display: none !important;
-    }
-    /* HIDE DEFAULT HEADERS IN SIDEBAR */
+    [data-testid="stSidebarNav"] { display: none !important; }
+    a[href*="?page="] { display: none !important; }
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3 {
-        display: none !important;
-    }
+    [data-testid="stSidebar"] h3 { display: none !important; }
 
-    /* === STYLE OUR CUSTOM BUTTONS === */
     .sidebar .stButton > button {
         background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
         color: white !important;
@@ -112,9 +101,6 @@ def render_sidebar():
     </style>
     """, unsafe_allow_html=True)
 
-    # === NO JS — CSS IS SAFE AND SUFFICIENT ===
-
-    # === YOUR BUTTONS (100% VISIBLE) ===
     st.sidebar.success(f"**{st.session_state.username}**")
 
     if st.sidebar.button("Home", key="nav_home", use_container_width=True):
@@ -129,7 +115,7 @@ def render_sidebar():
     if st.sidebar.button("Goals", key="nav_goals", use_container_width=True):
         st.session_state.current_page = "goals"
         st.rerun()
-    if st.sidebar.button("SOPHIA Coach", key="nav_coach", use_container_width=True):
+    if st.sidebar.button("RISE Coach", key="nav_coach", use_container_width=True):
         st.session_state.current_page = "ai_coach"
         st.rerun()
     if st.session_state.role == 'admin':
@@ -144,8 +130,8 @@ def render_sidebar():
 
 # ——— LOGIN / SIGNUP ———
 if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center;'>SOPHIA</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>RISE</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Resilient Integrated Strength Engine</p>", unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["Login", "Signup"])
     with tab1:
