@@ -108,16 +108,17 @@ else:
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
 
-    # ——— TEMPORARY ADMIN SETUP (REMOVE AFTER USE) ———
-    if st.secrets.get("ADMIN_SETUP") == "true":
+        # ——— ADMIN PROMOTION BUTTON (FOR YOU ONLY) ———
+    if st.session_state.username == "ianconner":  # CHANGE THIS TO YOUR EXACT USERNAME
         st.sidebar.markdown("---")
-        st.sidebar.warning("TEMP: Admin Setup Active")
-        if st.sidebar.button("MAKE ME ADMIN (ONE-TIME)", type="primary"):
+        st.sidebar.markdown("### 🔥 **DEV MODE**")
+        if st.sidebar.button("👑 PROMOTE TO ADMIN", type="primary", use_container_width=True):
             conn = get_conn()
             cur = conn.cursor()
             cur.execute("UPDATE users SET role='admin' WHERE id=%s", (st.session_state.user_id,))
             conn.commit()
             conn.close()
             st.session_state.role = 'admin'
-            st.sidebar.success("You are now ADMIN!")
+            st.sidebar.success("**ADMIN POWER UNLOCKED**")
             st.balloons()
+            st.rerun()
