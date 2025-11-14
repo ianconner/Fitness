@@ -50,6 +50,9 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
+        st.write("🔍 DEBUG: Form submitted!")
+        st.write(f"🔍 DEBUG: exercise='{exercise}', metric={metric_type}, value={target_value}, date={target_date}")
+        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -57,23 +60,30 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
+                st.write("🔍 DEBUG: Executing INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
+                st.write("🔍 DEBUG: INSERT committed!")
+                
+                # Verify
+                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+                count = cur.fetchone()[0]
+                st.write(f"🔍 DEBUG: Total goals now: {count}")
+                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
                 st.balloons()
                 
-                # Refresh to show new goal
-                import time
-                time.sleep(0.5)
-                st.rerun()
+                st.warning("⚠️ Auto-refresh disabled for debugging - manually refresh to see goal")
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
+                import traceback
+                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
