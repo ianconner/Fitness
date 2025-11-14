@@ -137,6 +137,7 @@ def main():
                 
                 # Check if this goal is being edited
                 if st.session_state.editing_goal_id == goal_id:
+                    st.write(f"🔍 DEBUG: Goal {goal_id} is in EDIT mode")
                     # Edit mode
                     st.markdown(f"### Editing: {row['exercise']}")
                     
@@ -186,6 +187,8 @@ def main():
                     
                     st.divider()
                 else:
+                    st.write(f"🔍 DEBUG: Goal {goal_id} is in DISPLAY mode")
+                    st.write(f"🔍 DEBUG: Exercise={row['exercise']}, Progress={row['Progress']}")
                     # Display mode
                     with st.container():
                         col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 0.7, 0.7])
@@ -218,6 +221,7 @@ def main():
                                     cur_del.close()
                                     conn_del.close()
                         st.divider()
+                    st.write(f"🔍 DEBUG: Finished displaying goal {goal_id}")
         else:
             st.info("No goals yet. Add one above!")
             
