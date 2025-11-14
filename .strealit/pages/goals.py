@@ -3,6 +3,7 @@ import streamlit as st
 from datetime import date, timedelta
 import psycopg2
 import pandas as pd
+import time
 
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
@@ -50,9 +51,6 @@ def main():
 
     # Process submission
     if st.session_state.goal_submitted:
-        st.write("🔍 DEBUG: Form submitted!")
-        st.write(f"🔍 DEBUG: exercise='{exercise}', metric={metric_type}, value={target_value}, date={target_date}")
-        
         if not exercise.strip():
             st.error("Please enter an exercise name.")
             st.session_state.goal_submitted = False
@@ -60,30 +58,22 @@ def main():
             conn = get_conn()
             cur = conn.cursor()
             try:
-                st.write("🔍 DEBUG: Executing INSERT...")
                 cur.execute(
                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                     (st.session_state.user_id, exercise, metric_type, target_value, target_date)
                 )
                 conn.commit()
-                st.write("🔍 DEBUG: INSERT committed!")
-                
-                # Verify
-                cur.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
-                count = cur.fetchone()[0]
-                st.write(f"🔍 DEBUG: Total goals now: {count}")
-                
                 st.success(f"✓ Goal added: {exercise}")
                 st.session_state.goal_submitted = False
                 st.balloons()
                 
-                st.warning("⚠️ Auto-refresh disabled for debugging - manually refresh to see goal")
+                # Refresh to show new goal
+                time.sleep(0.5)
+                st.rerun()
                 
             except Exception as e:
                 conn.rollback()
                 st.error(f"Error adding goal: {e}")
-                import traceback
-                st.code(traceback.format_exc())
                 st.session_state.goal_submitted = False
             finally:
                 cur.close()
@@ -94,7 +84,14 @@ def main():
     # ——— DISPLAY GOALS ———
     st.subheader("Active Goals")
     
-    st.write(f"🔍 DEBUG: Fetching for user_id={st.session_state.user_id}")
+    # Temporary debug
+    conn_debug = get_conn()
+    cur_debug = conn_debug.cursor()
+    cur_debug.execute("SELECT COUNT(*) FROM goals WHERE user_id=%s", (st.session_state.user_id,))
+    total = cur_debug.fetchone()[0]
+    st.write(f"🔍 DEBUG: Total goals in database for user {st.session_state.user_id}: {total}")
+    cur_debug.close()
+    conn_debug.close()
     
     conn = get_conn()
     cur = conn.cursor()
@@ -105,10 +102,7 @@ def main():
         )
         rows = cur.fetchall()
         
-        st.write(f"🔍 DEBUG: Found {len(rows)} rows")
-        
         if rows:
-            st.write(f"🔍 DEBUG: First row: {rows[0]}")
             df = pd.DataFrame(rows, columns=['id', 'exercise', 'metric_type', 'target_value', 'target_date', 'created_at'])
             
             # Calculate days left
@@ -121,8 +115,6 @@ def main():
             # Display each goal
             for idx, row in df.iterrows():
                 goal_id = row['id']
-                
-                st.write(f"🔍 DEBUG: Processing goal_id={goal_id}, editing={st.session_state.editing_goal_id}")
                 
                 # Check if this goal is being edited
                 if st.session_state.editing_goal_id == goal_id:
@@ -176,17 +168,12 @@ def main():
                     
                     st.divider()
                 else:
-                    st.write(f"🔍 DEBUG: Displaying goal {goal_id}")
-                    # Display mode - Simple layout that works
-                    col_main, col_buttons = st.columns([5, 1])
+                    # Display mode
+                    st.markdown(f"### {row['exercise']}")
                     
-                    st.write(f"🔍 DEBUG: Created columns")
-                    
-                    with col_main:
-                        st.markdown(f"### {row['exercise']}")
+                    col_info, col_buttons = st.columns([5, 1])
+                    with col_info:
                         st.write(f"**{row['metric_type'].replace('_', ' ').title()}:** {row['target_value']} | **Due:** {row['target_date'].strftime('%b %d, %Y')} | **Status:** {row['Progress']}")
-                    
-                    st.write(f"🔍 DEBUG: Rendered main column")
                     
                     with col_buttons:
                         if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
@@ -207,9 +194,7 @@ def main():
                                 cur_del.close()
                                 conn_del.close()
                     
-                    st.write(f"🔍 DEBUG: Rendered buttons")
                     st.divider()
-                    st.write(f"🔍 DEBUG: Finished goal {goal_id}")
         else:
             st.info("No goals yet. Add one above!")
             
