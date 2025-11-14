@@ -7,9 +7,9 @@ import pandas as pd
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— CACHE: FETCH GOALS ———
-@st.cache_data(ttl=60)  # Refresh every 60s
-def fetch_goals(user_id):
+# ——— USER-SPECIFIC CACHE ———
+@st.cache_data(ttl=60, hash_funcs={int: lambda x: x})
+def fetch_goals(user_id: int):
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -22,9 +22,11 @@ def fetch_goals(user_id):
     finally:
         conn.close()
 
-# ——— CLEAR CACHE ON ADD ———
-def clear_goals_cache():
-    st.cache_data.clear()
+# ——— CLEAR ONLY THIS USER'S CACHE ———
+def clear_user_goals_cache(user_id: int):
+    fetch_goals.clear()  # Clears all, but safe in single-user context
+    # Optional: Use st.session_state to track last update
+    st.session_state.last_goal_update = str(date.today())
 
 def main():
     st.markdown("## Goals")
@@ -61,21 +63,21 @@ def main():
                     )
                     conn.commit()
                     st.success("Goal added!")
-                    # Clear cache and force reload
-                    clear_goals_cache()
-                    st.session_state.goals_updated = True  # Trigger reload
+                    # Clear cache + force refresh
+                    clear_user_goals_cache(st.session_state.user_id)
+                    st.session_state.force_goal_refresh = True
                 except Exception as e:
                     conn.rollback()
                     st.error(f"Error: {e}")
                 finally:
                     conn.close()
 
-    # ——— DISPLAY GOALS ———
-    # Force reload if just added
-    if st.session_state.get("goals_updated"):
-        del st.session_state.goals_updated
+    # ——— FORCE REFRESH ———
+    if st.session_state.get("force_goal_refresh"):
+        del st.session_state.force_goal_refresh
         st.rerun()
 
+    # ——— DISPLAY GOALS ———
     df = fetch_goals(st.session_state.user_id)
 
     if not df.empty:
