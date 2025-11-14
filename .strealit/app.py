@@ -35,11 +35,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Run once
-try:
-    init_db()
-except:
-    pass
+# ——— FORCE RECREATE DATABASE ———
+init_db()  # Always run — drops and recreates tables
+st.success("Database initialized!")
 
 # ——— SESSION STATE ———
 for key in ['logged_in', 'user_id', 'username', 'role']:
