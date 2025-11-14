@@ -37,13 +37,13 @@ st.session_state.logged_in = st.session_state.user_id is not None
 # ——— SIDEBAR ———
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
-    st.sidebar.page_link("app.py", label="Home")
-    st.sidebar.page_link("pages/01_Dashboard.py", label="Dashboard")
-    st.sidebar.page_link("pages/02_Log_Workout.py", label="Log Workout")
-    st.sidebar.page_link("pages/03_Goals.py", label="Goals")
-    st.sidebar.page_link("pages/04_AI_Coach.py", label="SOPHIA Coach")
+    st.sidebar.page_link("../app.py", label="Home")
+    st.sidebar.page_link("../pages/01_Dashboard.py", label="Dashboard")
+    st.sidebar.page_link("../pages/02_Log_Workout.py", label="Log Workout")
+    st.sidebar.page_link("../pages/03_Goals.py", label="Goals")
+    st.sidebar.page_link("../pages/04_AI_Coach.py", label="SOPHIA Coach")
     if st.session_state.role == 'admin':
-        st.sidebar.page_link("pages/05_Admin.py", label="Admin")
+        st.sidebar.page_link("../pages/05_Admin.py", label="Admin")
     if st.sidebar.button("Logout", use_container_width=True):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
