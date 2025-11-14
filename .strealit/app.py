@@ -68,7 +68,7 @@ def init_db():
 init_db()
 
 # ——— SESSION STATE ———
-for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page', 'force_goal_refresh']:
+for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page', 'goals_force_refresh']:
     if key not in st.session_state:
         st.session_state[key] = None
 st.session_state.logged_in = st.session_state.user_id is not None
@@ -184,7 +184,7 @@ if not st.session_state.logged_in:
                             st.session_state.logged_in = True
                             st.session_state.just_logged_in = True
                             st.session_state.current_page = "home"
-                            st.session_state.force_goal_refresh = False
+                            st.session_state.goals_force_refresh = False
                             st.rerun()
                         else:
                             st.error("Invalid credentials")
