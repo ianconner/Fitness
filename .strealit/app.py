@@ -12,51 +12,31 @@ def init_db():
     cur = conn.cursor()
     
     schema_sql = """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
+    DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
             ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
         END IF;
     END $$;
-
     UPDATE users SET role = 'user' WHERE role IS NULL;
-
     DROP TABLE IF EXISTS workout_exercises, workouts, goals CASCADE;
-
     CREATE TABLE goals (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        exercise TEXT NOT NULL,
-        metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min', 'reps', 'weight_lbs', 'distance_mi')),
-        target_value NUMERIC NOT NULL,
-        target_date DATE NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        exercise TEXT NOT NULL, metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min','reps','weight_lbs','distance_mi')),
+        target_value NUMERIC NOT NULL, target_date DATE NOT NULL, created_at TIMESTAMP DEFAULT NOW()
     );
-
     CREATE TABLE workouts (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        workout_date DATE NOT NULL,
-        notes TEXT NOT NULL,
-        duration_min INTEGER,
-        created_at TIMESTAMP DEFAULT NOW()
+        id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        workout_date DATE NOT NULL, notes TEXT NOT NULL, duration_min INTEGER, created_at TIMESTAMP DEFAULT NOW()
     );
-
     CREATE TABLE workout_exercises (
-        id SERIAL PRIMARY KEY,
-        workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
-        exercise TEXT NOT NULL,
-        sets INTEGER,
-        reps INTEGER,
-        weight_lbs NUMERIC,
-        time_min NUMERIC,
-        rest_min NUMERIC,
-        distance_mi NUMERIC
+        id SERIAL PRIMARY KEY, workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
+        exercise TEXT NOT NULL, sets INTEGER, reps INTEGER, weight_lbs NUMERIC,
+        time_min NUMERIC, rest_min NUMERIC, distance_mi NUMERIC
     );
     """
     
     cur.execute(schema_sql)
-    st.success("Database schema embedded and loaded!")
+    st.success("Database schema loaded!")
     conn.commit()
     conn.close()
 
@@ -73,11 +53,8 @@ st.session_state.logged_in = st.session_state.user_id is not None
 def sidebar():
     st.sidebar.success(f"**{st.session_state.username}**")
     
-    # Home = Refresh
     if st.sidebar.button("Home", use_container_width=True):
         st.rerun()
-    
-    # Pages in .strealit/pages/
     if st.sidebar.button("Dashboard", use_container_width=True):
         st.switch_page("pages/01_Dashboard.py")
     if st.sidebar.button("Log Workout", use_container_width=True):
@@ -101,70 +78,55 @@ if not st.session_state.logged_in:
     st.markdown("<p style='text-align: center;'>Smart Optimized Performance Health Intelligence Assistant</p>", unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["Login", "Signup"])
-
     with tab1:
         with st.form("login_form"):
             st.write("### Login")
             username = st.text_input("Username", key="login_user")
             password = st.text_input("Password", type="password", key="login_pass")
-            login_btn = st.form_submit_button("Login")
-            if login_btn:
+            if st.form_submit_button("Login"):
                 if not username or not password:
-                    st.error("Please fill in both fields.")
+                    st.error("Fill both fields.")
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
-                    cur.execute(
-                        "SELECT id, username, COALESCE(role, 'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
-                        (username, password)
-                    )
+                    cur.execute("SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s", (username, password))
                     user = cur.fetchone()
                     conn.close()
                     if user:
-                        st.session_state.user_id = user[0]
-                        st.session_state.username = user[1]
-                        st.session_state.role = user[2]
+                        st.session_state.update(dict(zip(['user_id','username','role'], user)))
                         st.session_state.logged_in = True
                         st.session_state.just_logged_in = True
                         st.rerun()
                     else:
-                        st.error("Invalid username or password")
-
+                        st.error("Invalid credentials")
     with tab2:
         with st.form("signup_form"):
-            st.write("### Create Account")
-            new_user = st.text_input("Choose Username", key="signup_user")
-            new_pass = st.text_input("Choose Password", type="password", key="signup_pass")
-            signup_btn = st.form_submit_button("Signup")
-            if signup_btn:
+            st.write("### Signup")
+            new_user = st.text_input("Username", key="signup_user")
+            new_pass = st.text_input("Password", type="password", key="signup_pass")
+            if st.form_submit_button("Signup"):
                 if not new_user or not new_pass:
-                    st.error("Please fill in both fields.")
+                    st.error("Fill both fields.")
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
                     try:
-                        cur.execute(
-                            "INSERT INTO users (username, password, role) VALUES (%s, %s, 'user') RETURNING id, username",
-                            (new_user, new_pass)
-                        )
+                        cur.execute("INSERT INTO users (username,password,role) VALUES (%s,%s,'user') RETURNING id,username", (new_user,new_pass))
                         user = cur.fetchone()
                         conn.commit()
-                        st.success(f"Account created for **{user[1]}**! Please log in.")
+                        st.success(f"Created {user[1]}! Log in.")
                     except psycopg2.IntegrityError:
-                        st.error("Username already taken.")
+                        st.error("Username taken.")
                     finally:
                         conn.close()
-
 else:
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.success("Logged in!")
         st.rerun()
-
     sidebar()
     st.markdown(f"## Welcome, **{st.session_state.username}**")
     st.info("Use the sidebar to navigate.")
-
     if st.session_state.username == "ianconner":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### DEV MODE")
