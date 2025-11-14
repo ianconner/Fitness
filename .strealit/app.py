@@ -85,7 +85,7 @@ if st.session_state.logged_in and st.session_state.username == "ianconner" and s
         conn.close()
     st.rerun()
 
-# ——— RISE SIDEBAR ———
+# ——— RISE SIDEBAR: CLEAN, BOLD, NO DUPLICATES ———
 def render_sidebar():
     st.markdown("""
     <style>
@@ -94,6 +94,7 @@ def render_sidebar():
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 { display: none !important; }
+
     .sidebar .stButton > button {
         background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
         color: white !important;
@@ -159,7 +160,9 @@ if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>RISE</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Resilient Integrated Strength Engine</p>", unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["Login", "Signup"])
+    tab1, tab2 = st.tabs(["Login", "Signup"])  # FIXED: TWO SEPARATE TABS
+
+    # ——— LOGIN TAB ———
     with tab1:
         with st.form("main_login_form"):
             st.write("### Login")
@@ -187,7 +190,9 @@ if not st.session_state.logged_in:
                             st.error("Invalid credentials")
                     finally:
                         conn.close()
-    with tab1:
+
+    # ——— SIGNUP TAB ———
+    with tab2:
         with st.form("main_signup_form"):
             st.write("### Signup")
             new_user = st.text_input("Username", key="main_signup_user")
