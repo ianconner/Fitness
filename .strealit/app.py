@@ -53,28 +53,30 @@ if not st.session_state.logged_in:
     with tab1:
         with st.form("login_form"):
             st.write("### Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
+            username = st.text_input("Username", key="login_user")
+            password = st.text_input("Password", type="password", key="login_pass")
             login_btn = st.form_submit_button("Login")
             if login_btn:
-                conn = get_conn()
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT id, username, role FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
-                    (username, password)
-                )
-                row = cur.fetchone()
-                conn.close()
-                if row:
-                    st.session_state.user_id = row[0]
-                    st.session_state.username = row[1]
-                    st.session_state.role = row[2]
-                    st.session_state.logged_in = True
-                    st.success("Logged in!")
-                    st.rerun()
+                if not username or not password:
+                    st.error("Please enter both fields.")
                 else:
-                    st.error("Invalid username or password")
-
+                    conn = get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT id, username, role FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
+                        (username, password)
+                    )
+                    user = cur.fetchone()
+                    conn.close()
+                    if user:
+                        st.session_state.user_id = user[0]
+                        st.session_state.username = user[1]
+                        st.session_state.role = user[2]
+                        st.session_state.logged_in = True
+                        st.success("Logged in!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password")
     with tab2:
         with st.form("signup_form"):
             st.write("### Create Account")
