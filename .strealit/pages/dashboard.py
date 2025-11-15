@@ -51,7 +51,6 @@ def main():
         # 1. Define exercise categorization logic
         cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike']
         
-        # Function to classify exercise type
         def classify_exercise(exercise):
             if pd.isna(exercise):
                 return 'Other'
@@ -61,21 +60,21 @@ def main():
             
         df_workouts['type'] = df_workouts['exercise'].apply(classify_exercise)
         
-        # === FIX for DivisionByZero ===
-        # Convert columns to numeric, coercing errors to NaN
-        df_workouts['time_min'] = pd.to_numeric(df_workouts['time_min'], errors='coerce')
-        df_workouts['distance_mi'] = pd.to_numeric(df_workouts['distance_mi'], errors='coerce')
+        # === FIX for TypeError and DivisionByZero ===
+        # 1. Convert ALL relevant columns to numeric first, handling errors.
+        for col in ['weight_lbs', 'time_min', 'distance_mi', 'sets', 'reps']:
+             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         
-        # Replace 0 with NaN in 'distance_mi' to prevent division by zero
+        # 2. Replace 0 with NaN in 'distance_mi' to prevent division by zero
         df_workouts['distance_mi'] = df_workouts['distance_mi'].replace(0, np.nan)
         
-        # 2. Calculate Pace for Cardio (Pace = Time / Distance)
+        # 3. Calculate Pace for Cardio (Pace = Time / Distance)
         df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi'])
         # === END FIX ===
 
-        # 3. Format numeric columns for clean display (replace 0/NaN/inf with '-')
+        # 4. Format numeric columns for clean display (replace 0/NaN/inf with '-')
+        # Now that all are numeric, .round() will work.
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
-            # Round first, then convert to string and replace
             df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
         
         for col in ['sets', 'reps']:
@@ -96,7 +95,6 @@ def main():
         # === RECENT WORKOUTS AESTHETIC UPDATE (Card Layout) ===
         st.subheader("Recent Workouts")
         
-        # Get unique workout sessions (date, duration, notes)
         sessions = df_workouts[['workout_date', 'duration_min', 'notes']].drop_duplicates().sort_values('workout_date', ascending=False).head(5)
 
         if not sessions.empty:
@@ -105,7 +103,6 @@ def main():
                 session_duration = session['duration_min']
                 session_notes = session['notes']
                 
-                # Filter exercises for the current session date
                 session_exercises = df_workouts[df_workouts['workout_date'] == session['workout_date']]
                 
                 cardio_df = session_exercises[session_exercises['type'] == 'Cardio']
@@ -123,7 +120,7 @@ def main():
                             cardio_df[['exercise', 'time_min', 'distance_mi', 'pace_min_mi']].rename(
                                 columns={'time_min': 'Time (min)', 'distance_mi': 'Distance (mi)', 'pace_min_mi': 'Pace (min/mi)'}
                             ).set_index('exercise'),
-                            width='stretch' # Fix deprecation warning
+                            width='stretch'
                         )
 
                     if not weight_df.empty:
@@ -132,22 +129,20 @@ def main():
                             weight_df[['exercise', 'weight_lbs', 'sets', 'reps']].rename(
                                 columns={'weight_lbs': 'Weight (lbs)', 'sets': 'Sets', 'reps': 'Reps'}
                             ).set_index('exercise'),
-                            width='stretch' # Fix deprecation warning
+                            width='stretch'
                         )
-                st.write("") # Adds a small space between cards
+                st.write("") 
         else:
              st.info("No workouts yet.")
         # === END RECENT WORKOUTS AESTHETIC UPDATE ===
 
-        # Group by 'workout_date' which is already a DATE object
         freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
         fig = px.bar(freq, x='workout_date', y='count', title="Workouts per Day", color_discrete_sequence=["#00FF88"])
         
-        # Ensure only the date is displayed on the X-axis
         fig.update_xaxes(tickformat="%b %d")
         
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig, width='stretch') # Fix deprecation warning
+        st.plotly_chart(fig, use_container_width=True) # use_container_width is correct for plotly
     else:
         st.info("No workouts yet.")
 
@@ -155,29 +150,24 @@ def main():
     st.subheader("Active Goals")
     if not df_goals.empty:
         
-        # Convert target_date to datetime objects before using .dt accessor
         df_goals["target_date"] = pd.to_datetime(df_goals["target_date"])
-        # Use pd.Timestamp for compatible subtraction
         df_goals["Days Left"] = (df_goals["target_date"] - pd.Timestamp(date.today())).dt.days
         
-        # Use the status logic with emojis for better aesthetics
         df_goals["Status"] = df_goals["Days Left"].apply(
             lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
         )
         
-        # Loop and display each goal in its own "card"
         for idx, row in df_goals.iterrows():
             with st.container(border=True):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"**{row['exercise']}**")
-                    # Clean up the metric type display
                     metric_display = row['metric_type'].replace('_', ' ').replace('lbs', 'LBs').replace('mi', 'Mi').title()
                     st.caption(f"Goal: {row['target_value']} {metric_display}")
                 with col2:
                     st.markdown(f"**{row['Status']}**")
                     st.caption(f"{row['Days Left']} days left | Due {row['target_date'].strftime('%b %d')}")
-            st.write("") # Adds a small space between cards
+            st.write("") 
             
     else:
         st.info("No active goals.")
