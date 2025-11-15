@@ -86,6 +86,16 @@ def main():
                 ex["sets"] = 1
                 ex["weight_lbs"] = 0.0
                 
+                # Embedded Specific Exercise and Notes (visually under sub-category via expander/container)
+                with st.expander("Details for " + (ex["sub_category"] or "Cardio"), expanded=True):
+                    base_name_key = f"base_name_{i}"
+                    base_name = st.text_input("Specific Exercise (e.g., '5K Trail')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
+                    full_exercise = f"{ex['category']} - {ex['sub_category']}: {base_name}".strip(": ") if ex["category"] and ex["sub_category"] else base_name
+                    ex["exercise"] = full_exercise
+                    
+                    notes_key = f"notes_{i}"
+                    ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=notes_key, help="Amplifying details for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
+            
             elif ex["category"] == "Weights":
                 # Sets
                 sets_key = f"sets_{i}"
@@ -108,22 +118,33 @@ def main():
                 ex["distance_mi"] = 0.0
                 ex["pace_min_mi"] = 0.0
                 
+                # Embedded Specific Exercise and Notes
+                with st.expander("Details for " + (ex["sub_category"] or "Weights"), expanded=True):
+                    base_name_key = f"base_name_{i}"
+                    base_name = st.text_input("Specific Exercise (e.g., 'Bench Press')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
+                    full_exercise = f"{ex['category']} - {ex['sub_category']}: {base_name}".strip(": ") if ex["category"] and ex["sub_category"] else base_name
+                    ex["exercise"] = full_exercise
+                    
+                    notes_key = f"notes_{i}"
+                    ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=notes_key, help="Amplifying details for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
+            
             elif ex["category"] == "Free-Text":
-                # Free description text box
+                # Free description text box (serves as both exercise and notes)
                 free_desc_key = f"free_desc_{i}"
-                ex["exercise"] = st.text_area("Describe Your Exercise", value=ex["exercise"], key=free_desc_key, help="Full description of the custom exercise (e.g., 'Yoga flow: Sun salutations with 5-min hold')")
+                ex["exercise"] = st.text_area("Describe Your Exercise (includes notes/amplification)", value=ex["exercise"], key=free_desc_key, help="Full description of the custom exercise, including any amplifying details for RISE Coach (e.g., 'Yoga flow: Sun salutations with 5-min hold; felt relaxed, RPE 4/10')")
                 
                 # Optional time (generic for free-text)
                 time_key = f"time_{i}"
                 ex["time_min"] = st.number_input("Time (min) - Optional", min_value=0.0, value=ex["time_min"], key=time_key, step=0.5)
                 
-                # Reset other fields
+                # Reset other fields (no separate notes/specific)
                 ex["sets"] = 1
                 ex["reps"] = 1
                 ex["weight_lbs"] = 0.0
                 ex["distance_mi"] = 0.0
                 ex["pace_min_mi"] = 0.0
                 ex["rest_min"] = 0.0
+                ex["notes"] = ""  # Not used for Free-Text
                 
             else:
                 st.info("Select a category above to reveal inputs.")
@@ -136,16 +157,7 @@ def main():
                 ex["distance_mi"] = 0.0
                 ex["pace_min_mi"] = 0.0
                 ex["exercise"] = ""
-            
-            # Specific Exercise Name (after inputs)
-            base_name_key = f"base_name_{i}"
-            base_name = st.text_input("Specific Exercise (e.g., '5K Trail' or 'Bench Press')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
-            full_exercise = f"{ex['category']} - {ex['sub_category']}: {base_name}".strip(": ") if ex["category"] and ex["sub_category"] else base_name
-            ex["exercise"] = full_exercise
-            
-            # Per-Exercise Notes (amplification for all categories)
-            notes_key = f"notes_{i}"
-            ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=notes_key, help="Amplifying details for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
+                ex["notes"] = ""
             
             st.divider()
 
