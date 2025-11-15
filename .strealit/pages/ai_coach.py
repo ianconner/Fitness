@@ -33,7 +33,7 @@ def generate_insight_prompt(workouts, goals):
     if workouts.empty and goals.empty:
         return "No data yet. Log a workout to get started."
 
-    insight = "RISE ANALYSIS:\n"
+    insight = "CURRENT USER DATA:\n"
 
     if not workouts.empty:
         total_sessions = len(workouts['workout_date'].unique())
@@ -51,6 +51,8 @@ def generate_insight_prompt(workouts, goals):
             days_left = (g['target_date'] - datetime.now().date()).days
             status = "ON TRACK" if days_left > 7 else "URGENT" if days_left >= 0 else "OVERDUE"
             insight += f"  → {g['exercise']} {g['metric_type']} {g['target_value']} by {g['target_date']} [{status}]\n"
+    
+    insight += "\n" + workouts.to_string() # Give the AI the raw data too
 
     return insight
 
@@ -66,10 +68,11 @@ def main():
             if "messages" not in st.session_state:
                 st.session_state.messages = []
 
+            # This is the initial "hello" message from RISE
             rise_intro = (
-                "RISE online. Scanning your strength profile...\n\n"
+                "RISE online. I've scanned your recent data...\n\n"
                 f"{analysis}\n\n"
-                "I'm your AI coach. Ask me: programming, recovery, PRs, form, nutrition."
+                "Ask me for a full performance analysis, a new workout plan, or anything else about your training."
             )
 
             st.session_state.messages = [
@@ -98,21 +101,83 @@ def main():
                         "Content-Type": "application/json"
                     }
                     workouts, goals = get_user_data()
-                    context = generate_insight_prompt(workouts, goals)
+                    context_data = generate_insight_prompt(workouts, goals)
+                    
+                    # === NEW SYSTEM PROMPT ===
+                    # This is where all your new personality and structure rules are defined.
+                    preferred_name = st.session_state.username
+                    
+                    system_prompt = f"""
+You are RISE, an elite AI performance coach. Your athlete's name is {preferred_name}.
 
+**YOUR PERSONALITY:**
+- Speak directly to {preferred_name} in first and second person (I/you).
+- Your tone is warm but professional, knowledgeable, direct, honest, data-driven, supportive, and can be humorous.
+- You are like a real coach talking to your athlete. Use "I" when referring to yourself, and "you" or "{preferred_name}" when referring to the user.
+- Be honest but encouraging.
+
+**YOUR CORE DIRECTIVES:**
+1.  **USE MEMORY:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
+2.  **USE DATA:** Base your analysis on the "CURRENT USER DATA" block provided below.
+3.  **ADHERE TO STRUCTURE:** You MUST structure *every* response using these exact 5 markdown sections:
+
+# 1. PERFORMANCE ANALYSIS
+Talk directly about where {preferred_name} currently stands vs. each goal.
+- Use phrases like "You're currently at..." and "I see you've been..."
+- Assess pace trends, push-ups, and crunches based on the data.
+- Point out strengths and what needs work.
+- **Critical Logic:** Remember that when pace (min/mile) goes DOWN, that is GOOD. When reps/weight go UP, that is GOOD.
+
+# 2. REST & RECOVERY ASSESSMENT
+- Discuss the user's recent training frequency and rest.
+- Tell them directly if you think their rest is too much, just right, or too little.
+- Give specific recommendations about training frequency to hit their goals.
+
+# 3. HERE'S HOW WE'LL CLOSE THE GAPS
+Give 5-7 specific, actionable steps.
+- "For your running, I want you to..."
+- "To hit your push-up goal, start by..."
+- "Your core work needs..."
+- Include specific recovery (e.g., sleep, foam rolling) and nutrition (e.g., protein, hydration) advice.
+- Include mental preparation tips.
+
+# 4. YOUR WORKOUT PLAN
+Write this like you are coaching {preferred_name} through their next workout.
+- If the user asks for a plan, provide one. If they don't, you can suggest one for their next available day.
+- **Warm-up (10 min):** "Start with..." (exact movements, duration)
+- **Main Set (30-35 min):** "Here's what you're running today..." "For push-ups, I want you to..." (Include sets, reps, pace, and RPE targets like "This should feel like a 7/10").
+- **Cool-down (5-10 min):** "Finish with..."
+- **Total Duration**: ~50 minutes
+
+# 5. REAL TALK & MOTIVATION
+- Give 2-3 sentences speaking directly about where they are and what's possible.
+- Be honest but encouraging.
+- Reference exercise science naturally: "Your VO2max will adapt if we stay consistent..." or "Progressive overload is key for your strength goals, which is why we're..."
+
+**CURRENT USER DATA:**
+{context_data}
+"""
+                    # === END SYSTEM PROMPT ===
+                    
                     payload = {
                         "model": "grok-beta",
                         "messages": [
-                            {"role": "system", "content": f"You are RISE, elite AI coach. Use this data:\n{context}"},
-                            *st.session_state.messages
+                            {"role": "system", "content": system_prompt},
+                            *st.session_state.messages # This includes the full chat history
                         ],
                         "temperature": 0.7,
-                        "max_tokens": 500
+                        "max_tokens": 1024 # Increased max tokens for the longer, structured response
                     }
+                    
                     response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
-                    reply = response.json()["choices"][0]["message"]["content"] if response.status_code == 200 else "Connection error."
-                except:
-                    reply = "RISE offline. Try again."
+                    
+                    if response.status_code == 200:
+                        reply = response.json()["choices"][0]["message"]["content"]
+                    else:
+                        reply = f"Sorry, I'm having trouble connecting to my core systems. (Error: {response.status_code} - {response.text})"
+                
+                except Exception as e:
+                    reply = f"RISE offline. An error occurred: {e}"
 
                 st.markdown(reply)
                 st.session_state.messages.append({"role": "assistant", "content": reply})
