@@ -86,7 +86,7 @@ def main():
                 ex["sets"] = 1
                 ex["weight_lbs"] = 0.0
                 
-                # Embedded Specific Exercise and Notes (visually under sub-category via expander/container)
+                # Embedded Specific Exercise and Notes
                 with st.expander("Details for " + (ex["sub_category"] or "Cardio"), expanded=True):
                     base_name_key = f"base_name_{i}"
                     base_name = st.text_input("Specific Exercise (e.g., '5K Trail')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
@@ -200,7 +200,7 @@ def main():
                                 (workout_id, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"])
                             )
                     conn.commit()
-                    st.success(f"Partial session saved! {len([e for e in exercises if e['exercise'].strip() and e['category']])} exercises logged.")
+                    st.success("Workout saved! View it on the Dashboard.")
                     # Clear for next partial
                     st.session_state.exercises = []
                     st.rerun()
