@@ -44,8 +44,35 @@ def main():
     finally:
         conn.close()
 
-    # === DISPLAY ===
+    # === WORKOUT DATA PROCESSING FOR DISPLAY ===
     if not df_workouts.empty:
+        
+        # 1. Define exercise categorization logic
+        cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike']
+        
+        # Function to classify exercise type
+        def classify_exercise(exercise):
+            if pd.isna(exercise):
+                return 'Other'
+            if any(keyword in exercise.lower() for keyword in cardio_keywords):
+                return 'Cardio'
+            return 'Weight'
+            
+        df_workouts['type'] = df_workouts['exercise'].apply(classify_exercise)
+        
+        # 2. Calculate Pace for Cardio (Pace = Time / Distance)
+        # Handle division by zero for accuracy
+        df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi']).fillna(0)
+        df_workouts['pace_min_mi'] = df_workouts['pace_min_mi'].replace([float('inf'), float('-inf')], 0)
+        
+        # 3. Format numeric columns for clean display (replace 0/NaN with '-')
+        for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
+            df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0'], '-').replace(['nan', 'inf'], '-')
+        
+        for col in ['sets', 'reps']:
+             df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan'], '-')
+             
+        # === DISPLAY ===
         col1, col2, col3 = st.columns(3)
         with col1:
             total_workouts = len(df_workouts.drop_duplicates('workout_date'))
@@ -57,11 +84,10 @@ def main():
             avg_duration = df_workouts.groupby('workout_date')['duration_min'].sum().mean()
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
-        # === RECENT WORKOUTS AESTHETIC UPDATE ===
+        # === RECENT WORKOUTS AESTHETIC UPDATE (Card Layout) ===
         st.subheader("Recent Workouts")
         
-        # 1. Get unique workout sessions (date, duration, notes)
-        # Head(5) to limit the dashboard view to the 5 most recent
+        # Get unique workout sessions (date, duration, notes)
         sessions = df_workouts[['workout_date', 'duration_min', 'notes']].drop_duplicates().sort_values('workout_date', ascending=False).head(5)
 
         if not sessions.empty:
@@ -70,8 +96,11 @@ def main():
                 session_duration = session['duration_min']
                 session_notes = session['notes']
                 
-                # 2. Filter exercises for the current session date
-                exercises_in_session = df_workouts[df_workouts['workout_date'] == session['workout_date']]
+                # Filter exercises for the current session date
+                session_exercises = df_workouts[df_workouts['workout_date'] == session['workout_date']]
+                
+                cardio_df = session_exercises[session_exercises['type'] == 'Cardio']
+                weight_df = session_exercises[session_exercises['type'] == 'Weight']
 
                 with st.container(border=True):
                     st.markdown(f"#### 🗓️ Workout on {session_date}")
@@ -79,12 +108,27 @@ def main():
                     col_d.caption(f"**Duration:** {session_duration} min")
                     col_n.caption(f"**Notes:** {session_notes}")
                     
-                    # Display exercises in a clean, small table
-                    st.dataframe(
-                        exercises_in_session[['exercise', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi']].fillna('-'),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    if not cardio_df.empty:
+                        st.markdown("##### 🏃 Cardio")
+                        # Show Exercise, Time (min), Distance (mi), Pace (min/mi)
+                        st.dataframe(
+                            cardio_df[['exercise', 'time_min', 'distance_mi', 'pace_min_mi']].rename(
+                                columns={'time_min': 'Time (min)', 'distance_mi': 'Distance (mi)', 'pace_min_mi': 'Pace (min/mi)'}
+                            ).set_index('exercise'),
+                            use_container_width=True,
+                            hide_index=False
+                        )
+
+                    if not weight_df.empty:
+                        st.markdown("##### 💪 Weight Training")
+                        # Show Exercise, Weight (lbs), Sets, Reps
+                        st.dataframe(
+                            weight_df[['exercise', 'weight_lbs', 'sets', 'reps']].rename(
+                                columns={'weight_lbs': 'Weight (lbs)', 'sets': 'Sets', 'reps': 'Reps'}
+                            ).set_index('exercise'),
+                            use_container_width=True,
+                            hide_index=False
+                        )
                 st.write("") # Adds a small space between cards
         else:
              st.info("No workouts yet.")
@@ -93,7 +137,7 @@ def main():
         freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
         fig = px.bar(freq, x='workout_date', y='count', title="Workouts per Day", color_discrete_sequence=["#00FF88"])
         
-        # FIX: Ensure only the date is displayed on the X-axis
+        # Ensure only the date is displayed on the X-axis
         fig.update_xaxes(tickformat="%b %d")
         
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
