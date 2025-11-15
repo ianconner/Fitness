@@ -76,8 +76,7 @@ def main():
         # Use pd.Timestamp for compatible subtraction
         df_goals["Days Left"] = (df_goals["target_date"] - pd.Timestamp(date.today())).dt.days
         
-        # === AESTHETIC UPDATE ===
-        # Use the status logic with emojis from goals.py
+        # Use the status logic with emojis for better aesthetics
         df_goals["Status"] = df_goals["Days Left"].apply(
             lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
         )
@@ -95,9 +94,6 @@ def main():
                     st.markdown(f"**{row['Status']}**")
                     st.caption(f"{row['Days Left']} days left | Due {row['target_date'].strftime('%b %d')}")
             st.write("") # Adds a small space between cards
-        # === END AESTHETIC UPDATE ===
             
     else:
         st.info("No active goals.")
-
-}
