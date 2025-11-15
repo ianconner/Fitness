@@ -57,11 +57,45 @@ def main():
             avg_duration = df_workouts.groupby('workout_date')['duration_min'].sum().mean()
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
+        # === RECENT WORKOUTS AESTHETIC UPDATE ===
         st.subheader("Recent Workouts")
-        st.dataframe(df_workouts.head(10)[["workout_date", "exercise", "sets", "reps", "weight_lbs"]], use_container_width=True, hide_index=True)
+        
+        # 1. Get unique workout sessions (date, duration, notes)
+        # Head(5) to limit the dashboard view to the 5 most recent
+        sessions = df_workouts[['workout_date', 'duration_min', 'notes']].drop_duplicates().sort_values('workout_date', ascending=False).head(5)
+
+        if not sessions.empty:
+            for idx, session in sessions.iterrows():
+                session_date = session['workout_date'].strftime('%b %d, %Y')
+                session_duration = session['duration_min']
+                session_notes = session['notes']
+                
+                # 2. Filter exercises for the current session date
+                exercises_in_session = df_workouts[df_workouts['workout_date'] == session['workout_date']]
+
+                with st.container(border=True):
+                    st.markdown(f"#### 🗓️ Workout on {session_date}")
+                    col_d, col_n = st.columns([1, 4])
+                    col_d.caption(f"**Duration:** {session_duration} min")
+                    col_n.caption(f"**Notes:** {session_notes}")
+                    
+                    # Display exercises in a clean, small table
+                    st.dataframe(
+                        exercises_in_session[['exercise', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi']].fillna('-'),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                st.write("") # Adds a small space between cards
+        else:
+             st.info("No workouts yet.")
+        # === END RECENT WORKOUTS AESTHETIC UPDATE ===
 
         freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
         fig = px.bar(freq, x='workout_date', y='count', title="Workouts per Day", color_discrete_sequence=["#00FF88"])
+        
+        # FIX: Ensure only the date is displayed on the X-axis
+        fig.update_xaxes(tickformat="%b %d")
+        
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     else:
