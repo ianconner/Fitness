@@ -7,6 +7,9 @@ from sqlalchemy import create_engine
 
 engine = create_engine(st.secrets["POSTGRES_URL"])
 
+# Define the RISE avatar URL globally to prevent typos
+RISE_AVATAR_URL = "https://api.dicebear.com/7.x/bottts/svg?seed=RISE"
+
 def get_user_data():
     """Fetches the user's latest 20 workouts and active goals."""
     try:
@@ -40,18 +43,18 @@ def generate_data_context(workouts, goals):
     if not workouts.empty:
         total_sessions = len(workouts['workout_date'].unique())
         last_workout_date = workouts['workout_date'].max()
-        days_since_workout = (datetime.now().date() - last_workout_date).days
+        days_since_workout = (datetime.now().date() - last_workout_date).days if not pd.isna(last_workout_date) else 0
         
         insight += f"• {total_sessions} sessions logged. Last workout was {days_since_workout} days ago.\n"
         
         # Add details on recent workouts
         recent_run = workouts[workouts['exercise'].str.contains('Run', case=False)].head(1)
-        if not recent_run.empty:
-            pace = recent_run['time_min'].iloc[0] / recent_run['distance_mi'].iloc[0] if not pd.isna(recent_run['distance_mi'].iloc[0]) and recent_run['distance_mi'].iloc[0] > 0 else 0
+        if not recent_run.empty and not pd.isna(recent_run['distance_mi'].iloc[0]) and not pd.isna(recent_run['time_min'].iloc[0]):
+            pace = recent_run['time_min'].iloc[0] / recent_run['distance_mi'].iloc[0] if recent_run['distance_mi'].iloc[0] > 0 else 0
             insight += f"• Last Run: {recent_run['distance_mi'].iloc[0]} mi in {recent_run['time_min'].iloc[0]} min (Pace: {pace:.2f} min/mi)\n"
             
         recent_pushup = workouts[workouts['exercise'].str.contains('Push-up', case=False)].head(1)
-        if not recent_pushup.empty:
+        if not recent_pushup.empty and not pd.isna(recent_pushup['sets'].iloc[0]) and not pd.isna(recent_pushup['reps'].iloc[0]):
             insight += f"• Last Push-ups: {recent_pushup['sets'].iloc[0]} sets of {recent_pushup['reps'].iloc[0]} reps\n"
 
     if not goals.empty:
@@ -68,7 +71,7 @@ def main():
     st.markdown("## RISE Coach")
     st.markdown("**Resilient Integrated Strength Engine — Your AI Performance Partner**")
 
-    # === NEW: Two-Button Logic ===
+    # === Two-Button Logic for Control ===
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Re-Analyze Data", width='stretch'):
@@ -84,7 +87,7 @@ def main():
                 if "messages" not in st.session_state:
                      st.session_state.messages = []
                 st.session_state.messages.append({"role": "assistant", "content": new_analysis_message})
-                st.success("Data re-analyzed!")
+                st.success("Data re-analyzed and added to chat memory.")
                 st.rerun()
 
     with col2:
@@ -96,10 +99,10 @@ def main():
                 del st.session_state.analysis_done
             st.success("Coach reset. Starting fresh...")
             st.rerun()
-    # === END: Two-Button Logic ===
+    # === End Two-Button Logic ===
 
 
-    # This block now only runs on the very first load or after a "Reset Chat"
+    # This block runs on initial load or after a "Reset Chat"
     if "analysis_done" not in st.session_state:
         with st.spinner("RISE is analyzing your data..."):
             workouts, goals = get_user_data()
@@ -122,7 +125,8 @@ def main():
 
     # Display the chat history
     for msg in st.session_state.messages:
-        avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=RISE" if msg["role"] == "assistant" else "user"
+        # --- FIX 1: Ensure correct URL in display loop ---
+        avatar = RISE_AVATAR_URL if msg["role"] == "assistant" else "user"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
@@ -132,7 +136,8 @@ def main():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant", avatar="https.api.dicebear.com/7.x/bottts/svg?seed=RISE"):
+        # --- FIX 2: Ensure correct URL in new prompt handler ---
+        with st.chat_message("assistant", avatar=RISE_AVATAR_URL):
             with st.spinner("RISE is thinking..."):
                 try:
                     headers = {
@@ -141,15 +146,14 @@ def main():
                     }
                     
                     # --- Data Re-analysis ---
-                    # This happens *every time* you send a message, ensuring the AI
-                    # always has the absolute latest data.
                     workouts, goals = get_user_data()
                     current_data_context = generate_data_context(workouts, goals)
                     
                     preferred_name = st.session_state.username
-                    days_since_workout = (datetime.now().date() - workouts['workout_date'].max()).days if not workouts.empty else 0
+                    days_since_workout = (datetime.now().date() - workouts['workout_date'].max()).days if not workouts.empty and not pd.isna(workouts['workout_date'].max()) else 0
                     
-                    # --- This is the updated System Prompt with your persona ---
+                    # --- System Prompt with persona ---
+                    # Using f-string for preferred_sh_name and days_since_workout
                     system_prompt = f"""
 You are RISE, an elite AI performance coach. Your athlete's name is {preferred_name}.
 
@@ -160,7 +164,7 @@ You are RISE, an elite AI performance coach. Your athlete's name is {preferred_n
 - Be honest but encouraging.
 
 **YOUR CORE DIRECTIVES:**
-1.  **USE MEMORY:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_sh_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
+1.  **USE MEMORY:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
 2.  **USE DATA:** Base your analysis on the "CURRENT USER DATA" block provided below.
 3.  **ADHERE TO STRUCTURE:** If the user asks for an analysis or plan (e.g., "full performance analysis"), you MUST structure your response using these exact 5 markdown sections:
 
@@ -186,7 +190,7 @@ Give 5-7 specific, actionable steps.
 
 # 4. YOUR WORKOUT PLAN
 Write this like you are coaching {preferred_name} through their next workout.
-- Provide a plan for their next workout (e.g., "for tomorrow, {datetime.now().date() + pd.Timedelta(days=1).strftime('%A, %B %d')}").
+- Provide a plan for their next workout (e.g., "for tomorrow, {(datetime.now().date() + pd.Timedelta(days=1)).strftime('%A, %B %d')}").
 - **Warm-up (10 min):** "Start with..." (exact movements, duration)
 - **Main Set (30-35 min):** "Here's what you're running today..." "For push-ups, I want you to..." (Include sets, reps, pace, and RPE targets like "This should feel like a 7/10").
 - **Cool-down (5-10 min):** "Finish with..."
@@ -208,7 +212,7 @@ Write this like you are coaching {preferred_name} through their next workout.
                             *st.session_state.messages # This includes the full chat history
                         ],
                         "temperature": 0.7,
-                        "max_tokens": 1024 # Increased max tokens for the longer, structured response
+                        "max_tokens": 1024
                     }
                     
                     response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
