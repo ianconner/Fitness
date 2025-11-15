@@ -8,11 +8,24 @@ import plotly.express as px
 import re
 
 def get_conn():
-    # Use st.secrets for connection details
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
+def parse_exercise_name(exercise_str):
+    if not exercise_str or not isinstance(exercise_str, str):
+        return None, None, exercise_str or ""
+    parts = [p.strip() for p in exercise_str.split(":")]
+    name = parts[-1]
+    if " - " in exercise_str:
+        cat_sub = exercise_str.split(" - ", 1)[0]
+        if " - " in cat_sub:
+            cat, sub = cat_sub.split(" - ", 1)
+            return cat, sub, name
+        else:
+            return cat_sub, None, name
+    return None, None, name
+
 # ─────────────────────────────────────────────────────────────────────────────
-# AUTO-DETECT PACE GOAL HELPERS
+# AUTO-DETECT PACE GOAL: "Run 2 miles in 18 min" → 9.0 min/mi
 # ─────────────────────────────────────────────────────────────────────────────
 def extract_pace_goal(goal_text):
     """
@@ -116,9 +129,10 @@ def main():
             total_duration = df_workouts['duration_min'].astype(float).sum()
             st.metric("Total Time", f"{int(total_duration)} min")
         with col3:
+            # FIX: Removed the erroneous .astype(float) from the groupby operation.
             # Recalculate avg duration from unique workout totals
-            valid_durations = df_workouts.groupby('workout_date')['duration_min'].astype(float).sum()
-            avg_duration = valid_durations.mean() if not valid_durations.empty else 0
+            daily_duration_sums = df_workouts.groupby('workout_date')['duration_min'].sum()
+            avg_duration = daily_duration_sums.mean() if not daily_duration_sums.empty else 0
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
         st.subheader("Recent Workouts")
@@ -142,7 +156,6 @@ def main():
         progress = {}
         # Only include columns that are numeric or can be numeric
         numeric_cols_for_calc = ['duration_min', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']
-        # The original df_workouts has been cleaned for display, so we re-read the raw (or use the numeric conversion)
         # Using a fresh numeric frame for calculations
         df_workouts_numeric = df_workouts.apply(pd.to_numeric, errors='coerce').fillna(0)
         
@@ -194,7 +207,7 @@ def main():
                 
                 current = pd.to_numeric(matches[metric], errors='coerce').max()
                 
-                # 💥 FIX 1: Convert Decimal target to float for division
+                # FIX: Convert Decimal target to float for division
                 target_float = float(target) 
                 
                 pct = min((current / target_float) * 100, 150) if target_float > 0 and current > 0 else 0
@@ -224,7 +237,7 @@ def main():
                         current_display = f"{data['current']:.1f}" if pd.notna(data['current']) and data['current'] else 'No Data'
                         st.caption(f"Goal: {data['target']} {row['metric_type'].replace('_', ' ')} | Current: {current_display}")
                     
-                    # 💥 FIX 2: Cap the progress bar value at 1.0 (100%) to prevent Streamlit error
+                    # FIX: Cap the progress bar value at 1.0 (100%)
                     st.progress(min(data['pct'] / 100, 1.0)) 
 
                 with c2:
