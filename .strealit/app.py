@@ -102,8 +102,7 @@ def render_sidebar():
         # Navigation
         st.markdown("### Navigation")
         
-        # --- HOME BUTTON ELIMINATED HERE ---
-        
+        # Only keeping the primary navigation buttons (the "bottom set")
         if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
             st.session_state.current_page = "dashboard"
             st.rerun()
@@ -191,11 +190,8 @@ else:
         st.rerun()
 
     # Set default page to dashboard and handle routing
-    # FIX: Change default from "home" to "dashboard"
     page = st.session_state.get("current_page", "dashboard")
 
-    # The 'home' page routing logic is eliminated.
-    
     if page == "dashboard":
         import pages.dashboard as p
         p.main()
