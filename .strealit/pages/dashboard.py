@@ -78,4 +78,12 @@ def main():
             df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
         
         for col in ['sets', 'reps', 'rest_min']:
-             df_workouts[col] = df_workouts[col].astype(str
+             df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan', '<NA>'], '-')
+             
+        # === DISPLAY ===
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_workouts = len(df_workouts.drop_duplicates('workout_id'))
+            st.metric("Total Workouts", total_workouts)
+        with col2:
+            total_duration
