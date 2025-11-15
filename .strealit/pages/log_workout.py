@@ -25,7 +25,7 @@ def main():
             # Category Selection
             category_key = f"cat_{i}"
             previous_category = ex.get("previous_category")
-            selected_category = st.selectbox("Category", ["", "Cardio", "Weights"], index=0 if not ex.get("category") else ["Cardio", "Weights"].index(ex["category"]), key=category_key)
+            selected_category = st.selectbox("Category", ["", "Cardio", "Weights", "Free-Text"], index=0 if not ex.get("category") else ["Cardio", "Weights", "Free-Text"].index(ex["category"]), key=category_key)
             
             # Reset sub_category if category changed
             if previous_category != selected_category:
@@ -48,11 +48,14 @@ def main():
                     sub_index = 0 if not ex.get("sub_category") else sub_options.index(ex["sub_category"]) if ex["sub_category"] in sub_options else 0
                     selected_sub = st.selectbox("Sub-Category", sub_options, index=sub_index, key=sub_category_key)
                     sub_category = selected_sub
+                elif ex["category"] == "Free-Text":
+                    # No sub-category for Free-Text
+                    st.text("")  # Placeholder
                 ex["sub_category"] = sub_category
             else:
                 st.text("")  # Placeholder for alignment
             
-            # Conditional Inputs (appear after sub-category)
+            # Conditional Inputs Based on Category
             if ex["category"] == "Cardio":
                 # Reps/Intervals (if >1, show rest)
                 reps_key = f"reps_{i}"
@@ -105,6 +108,23 @@ def main():
                 ex["distance_mi"] = 0.0
                 ex["pace_min_mi"] = 0.0
                 
+            elif ex["category"] == "Free-Text":
+                # Free description text box
+                free_desc_key = f"free_desc_{i}"
+                ex["exercise"] = st.text_area("Describe Your Exercise", value=ex["exercise"], key=free_desc_key, help="Full description of the custom exercise (e.g., 'Yoga flow: Sun salutations with 5-min hold')")
+                
+                # Optional time (generic for free-text)
+                time_key = f"time_{i}"
+                ex["time_min"] = st.number_input("Time (min) - Optional", min_value=0.0, value=ex["time_min"], key=time_key, step=0.5)
+                
+                # Reset other fields
+                ex["sets"] = 1
+                ex["reps"] = 1
+                ex["weight_lbs"] = 0.0
+                ex["distance_mi"] = 0.0
+                ex["pace_min_mi"] = 0.0
+                ex["rest_min"] = 0.0
+                
             else:
                 st.info("Select a category above to reveal inputs.")
                 # Reset all
@@ -115,14 +135,9 @@ def main():
                 ex["rest_min"] = 1.5
                 ex["distance_mi"] = 0.0
                 ex["pace_min_mi"] = 0.0
+                ex["exercise"] = ""
             
-            # Specific Exercise Name (after inputs)
-            base_name_key = f"base_name_{i}"
-            base_name = st.text_input("Specific Exercise (e.g., '5K Trail' or 'Bench Press')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
-            full_exercise = f"{ex['category']} - {ex['sub_category']}: {base_name}".strip(": ") if ex["category"] and ex["sub_category"] else base_name
-            ex["exercise"] = full_exercise
-            
-            # Per-Exercise Notes (amplification)
+            # Per-Exercise Notes (amplification for all categories)
             notes_key = f"notes_{i}"
             ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=notes_key, help="Amplifying details for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
             
@@ -154,4 +169,4 @@ def main():
                 try:
                     # Insert workout (session-level)
                     cur.execute(
-                        "INSERT INTO workouts (user
+                        "INSERT INTO workouts (user_id, workout_date, notes
