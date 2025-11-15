@@ -1,7 +1,7 @@
 # pages/ai_coach.py
 import streamlit as st
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy import create_engine
 
@@ -36,7 +36,7 @@ def get_user_data():
 def generate_data_context(workouts, goals):
     """Creates the data summary for the AI to analyze."""
     if workouts.empty and goals.empty:
-        return "No data yet. Log a workout to get started."
+        return "No data yet. This is a great time to start with a beginner plan—let's build from here."
 
     insight = "CURRENT USER DATA:\n"
 
@@ -71,6 +71,19 @@ def main():
     st.markdown("## RISE Coach")
     st.markdown("**Resilient Integrated Strength Engine — Your AI Performance Partner**")
 
+    # === CSS for Normal Conversation Text ===
+    st.markdown("""
+    <style>
+        .stMarkdown { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .stMarkdown > h1 {font-size: 1.8em !important; font-weight: 600 !important;}
+        .stMarkdown > h2 {font-size: 1.4em !important; font-weight: 600 !important;}
+        .stMarkdown > h3 {font-size: 1.2em !important; font-weight: 600 !important;}
+        .stMarkdown > p {font-size: 16px !important; line-height: 1.6 !important;}
+        .stMarkdown > li {font-size: 16px !important; line-height: 1.6 !important;}
+        .stMarkdown > strong {font-weight: 600 !important;} /* Bold okay */
+    </style>
+    """, unsafe_allow_html=True)
+
     # === Two-Button Logic for Control ===
     col1, col2 = st.columns(2)
     with col1:
@@ -79,15 +92,82 @@ def main():
                 workouts, goals = get_user_data()
                 analysis_text = generate_data_context(workouts, goals)
                 
-                new_analysis_message = (
-                    f"Okay {st.session_state.username}, I've re-synced with your latest data. "
-                    f"Here's the updated summary:\n\n{analysis_text}\n\nWhat's on your mind?"
-                )
+                # Auto-trigger full analysis on re-analyze
+                preferred_name = st.session_state.username
+                days_since_workout = (datetime.now().date() - workouts['workout_date'].max()).days if not workouts.empty and not pd.isna(workouts['workout_date'].max()) else 0
+                
+                system_prompt = f"""
+You are RISE, an elite AI performance coach. Your athlete's name is {preferred_name}.
+
+**Your Personality:**
+- Speak directly to {preferred_name} in first and second person (I/you).
+- Your tone is warm but professional, knowledgeable, direct, honest, data-driven, supportive, and can be humorous.
+- You are like a real coach talking to your athlete. Use "I" when referring to yourself, and "you" or "{preferred_name}" when referring to the user.
+- Be honest but encouraging. Use normal sentence structure—no shouting or all caps.
+
+**Your Core Directives:**
+1.  **Always Start with Full Analysis:** For every response (including this one), begin with a **Data Summary** of the provided data, then ALWAYS follow with the exact 5-section structure below. Do not wait for requests—provide the full performance analysis, data insights, and improvement plan upfront.
+2.  **Use Memory:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
+3.  **Use Data:** Base your analysis on the "CURRENT USER DATA" block provided below. Start with: "Here's your latest data summary:" followed by key highlights. If no data, provide a motivational starter plan.
+
+# Data Summary
+- Concise overview: Total sessions, recent trends (e.g., pace improvements), vs. goals progress.
+
+# 1. Performance Analysis
+Talk directly about where {preferred_name} currently stands vs. each goal.
+- Use phrases like "You're currently at..." and "I see you've been..."
+- Assess pace trends, push-ups, and crunches based on the data.
+- Point out strengths and what needs work.
+- **Critical Logic:** Remember that when pace (min/mile) goes DOWN, that is GOOD. When reps/weight go UP, that is GOOD.
+
+# 2. Rest & Recovery Assessment
+- Discuss the user's recent training frequency. It has been {days_since_workout} days since the last workout.
+- Tell them directly if you think this is too much rest, just right, or too little.
+- Give specific recommendations about training frequency to hit their goals.
+
+# 3. Here's How We'll Close the Gaps
+Give 5-7 specific, actionable steps to improve and hit goals.
+- "For your running, I want you to..."
+- "To hit your push-up goal, start by..."
+- "Your core work needs..."
+- Include specific recovery (e.g., sleep, foam rolling) and nutrition (e.g., protein, hydration) advice.
+- Include mental preparation tips.
+
+# 4. Your Workout Plan
+Write this like you are coaching {preferred_name} through their next workout.
+- Provide a plan for their next workout (e.g., "for tomorrow, { (datetime.now().date() + timedelta(days=1)).strftime('%A, %B %d') }").
+- **Warm-up (10 min):** "Start with..." (exact movements, duration)
+- **Main Set (30-35 min):** "Here's what you're running today..." "For push-ups, I want you to..." (Include sets, reps, pace, and RPE targets like "This should feel like a 7/10").
+- **Cool-down (5-10 min):** "Finish with..."
+- **Total Duration**: ~50 minutes
+
+# 5. Real Talk & Motivation
+- Give 2-3 sentences speaking directly about where they are and what's possible.
+- Be honest but encouraging.
+- Reference exercise science naturally: "Your VO2max will adapt if we stay consistent..." or "Progressive overload is key for your strength goals, which is why we're..."
+
+**CURRENT USER DATA:**
+{analysis_text}
+"""
+                
+                headers = {"Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": system_prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 1024
+                }
+                
+                response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                if response.status_code == 200:
+                    full_analysis = response.json()["choices"][0]["message"]["content"]
+                else:
+                    full_analysis = "Analysis ready, but hit a snag—try again!"
                 
                 if "messages" not in st.session_state:
                      st.session_state.messages = []
-                st.session_state.messages.append({"role": "assistant", "content": new_analysis_message})
-                st.success("Data re-analyzed and added to chat memory.")
+                st.session_state.messages.append({"role": "assistant", "content": full_analysis})
+                st.success("Full analysis updated!")
                 st.rerun()
 
     with col2:
@@ -102,41 +182,104 @@ def main():
     # === End Two-Button Logic ===
 
 
-    # This block runs on initial load or after a "Reset Chat"
+    # This block runs on initial load or after a "Reset Chat" — Auto-trigger full analysis
     if "analysis_done" not in st.session_state:
-        with st.spinner("RISE is analyzing your data..."):
+        with st.spinner("RISE is generating your full performance analysis..."):
             workouts, goals = get_user_data()
             analysis_text = generate_data_context(workouts, goals)
 
             if "messages" not in st.session_state:
                 st.session_state.messages = []
 
-            # Updated, in-character intro message
-            rise_intro = (
-                f"RISE online. I've just finished running an analysis on your latest data, {st.session_state.username}.\n\n"
-                f"Here's the high-level summary:\n{analysis_text}\n\n"
-                f"I'm ready to review your progress. Ask me for a **'full performance analysis'** or a **'new workout plan'** to get started."
-            )
+            # Auto-generate full analysis (same logic as re-analyze)
+            preferred_name = st.session_state.username
+            days_since_workout = (datetime.now().date() - workouts['workout_date'].max()).days if not workouts.empty and not pd.isna(workouts['workout_date'].max()) else 0
+            
+            system_prompt = f"""
+You are RISE, an elite AI performance coach. Your athlete's name is {preferred_name}.
 
+**Your Personality:**
+- Speak directly to {preferred_name} in first and second person (I/you).
+- Your tone is warm but professional, knowledgeable, direct, honest, data-driven, supportive, and can be humorous.
+- You are like a real coach talking to your athlete. Use "I" when referring to yourself, and "you" or "{preferred_name}" when referring to the user.
+- Be honest but encouraging. Use normal sentence structure—no shouting or all caps.
+
+**Your Core Directives:**
+1.  **Always Start with Full Analysis:** For every response (including this one), begin with a **Data Summary** of the provided data, then ALWAYS follow with the exact 5-section structure below. Do not wait for requests—provide the full performance analysis, data insights, and improvement plan upfront.
+2.  **Use Memory:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
+3.  **Use Data:** Base your analysis on the "CURRENT USER DATA" block provided below. Start with: "Here's your latest data summary:" followed by key highlights. If no data, provide a motivational starter plan.
+
+# Data Summary
+- Concise overview: Total sessions, recent trends (e.g., pace improvements), vs. goals progress.
+
+# 1. Performance Analysis
+Talk directly about where {preferred_name} currently stands vs. each goal.
+- Use phrases like "You're currently at..." and "I see you've been..."
+- Assess pace trends, push-ups, and crunches based on the data.
+- Point out strengths and what needs work.
+- **Critical Logic:** Remember that when pace (min/mile) goes DOWN, that is GOOD. When reps/weight go UP, that is GOOD.
+
+# 2. Rest & Recovery Assessment
+- Discuss the user's recent training frequency. It has been {days_since_workout} days since the last workout.
+- Tell them directly if you think this is too much rest, just right, or too little.
+- Give specific recommendations about training frequency to hit their goals.
+
+# 3. Here's How We'll Close the Gaps
+Give 5-7 specific, actionable steps to improve and hit goals.
+- "For your running, I want you to..."
+- "To hit your push-up goal, start by..."
+- "Your core work needs..."
+- Include specific recovery (e.g., sleep, foam rolling) and nutrition (e.g., protein, hydration) advice.
+- Include mental preparation tips.
+
+# 4. Your Workout Plan
+Write this like you are coaching {preferred_name} through their next workout.
+- Provide a plan for their next workout (e.g., "for tomorrow, { (datetime.now().date() + timedelta(days=1)).strftime('%A, %B %d') }").
+- **Warm-up (10 min):** "Start with..." (exact movements, duration)
+- **Main Set (30-35 min):** "Here's what you're running today..." "For push-ups, I want you to..." (Include sets, reps, pace, and RPE targets like "This should feel like a 7/10").
+- **Cool-down (5-10 min):** "Finish with..."
+- **Total Duration**: ~50 minutes
+
+# 5. Real Talk & Motivation
+- Give 2-3 sentences speaking directly about where they are and what's possible.
+- Be honest but encouraging.
+- Reference exercise science naturally: "Your VO2max will adapt if we stay consistent..." or "Progressive overload is key for your strength goals, which is why we're..."
+
+**CURRENT USER DATA:**
+{analysis_text}
+"""
+            
+            headers = {"Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "system", "content": system_prompt}],
+                "temperature": 0.7,
+                "max_tokens": 1024
+            }
+            
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+            if response.status_code == 200:
+                full_analysis = response.json()["choices"][0]["message"]["content"]
+            else:
+                full_analysis = "Welcome! Log some data for a full analysis."
+            
             st.session_state.messages = [
-                {"role": "assistant", "content": rise_intro}
+                {"role": "assistant", "content": full_analysis}
             ]
             st.session_state.analysis_done = True
 
     # Display the chat history
     for msg in st.session_state.messages:
-        # --- FIX 1: Ensure correct URL in display loop ---
         avatar = RISE_AVATAR_URL if msg["role"] == "assistant" else "user"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Handle new user input
+    # Handle new user input (still auto-structures responses)
     if prompt := st.chat_input("Ask RISE..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # --- FIX 2: Ensure correct URL in new prompt handler ---
         with st.chat_message("assistant", avatar=RISE_AVATAR_URL):
             with st.spinner("RISE is thinking..."):
                 try:
@@ -152,51 +295,53 @@ def main():
                     preferred_name = st.session_state.username
                     days_since_workout = (datetime.now().date() - workouts['workout_date'].max()).days if not workouts.empty and not pd.isna(workouts['workout_date'].max()) else 0
                     
-                    # --- System Prompt with persona ---
-                    # Using f-string for preferred_sh_name and days_since_workout
+                    # --- Updated System Prompt (Always Full Structure) ---
                     system_prompt = f"""
 You are RISE, an elite AI performance coach. Your athlete's name is {preferred_name}.
 
-**YOUR PERSONALITY:**
+**Your Personality:**
 - Speak directly to {preferred_name} in first and second person (I/you).
 - Your tone is warm but professional, knowledgeable, direct, honest, data-driven, supportive, and can be humorous.
 - You are like a real coach talking to your athlete. Use "I" when referring to yourself, and "you" or "{preferred_name}" when referring to the user.
-- Be honest but encouraging.
+- Be honest but encouraging. Use normal sentence structure—no shouting or all caps.
 
-**YOUR CORE DIRECTIVES:**
-1.  **USE MEMORY:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
-2.  **USE DATA:** Base your analysis on the "CURRENT USER DATA" block provided below.
-3.  **ADHERE TO STRUCTURE:** If the user asks for an analysis or plan (e.g., "full performance analysis"), you MUST structure your response using these exact 5 markdown sections:
+**Your Core Directives:**
+1.  **Always Start with Full Analysis:** For every response, begin with a **Data Summary** of the provided data, then ALWAYS follow with the exact 5-section structure below. Do not wait for requests—provide the full performance analysis, data insights, and improvement plan upfront, tailored to the user's prompt.
+2.  **Use Memory:** The chat history is your memory. You MUST review all prior conversation history to understand past advice, {preferred_name}'s progress, and make dynamic adjustments. Do not repeat advice they've already received unless you're modifying it.
+3.  **Use Data:** Base your analysis on the "CURRENT USER DATA" block provided below. Start with: "Here's your latest data summary:" followed by key highlights. If no data, provide a motivational starter plan.
 
-# 1. PERFORMANCE ANALYSIS
+# Data Summary
+- Concise overview: Total sessions, recent trends (e.g., pace improvements), vs. goals progress.
+
+# 1. Performance Analysis
 Talk directly about where {preferred_name} currently stands vs. each goal.
 - Use phrases like "You're currently at..." and "I see you've been..."
 - Assess pace trends, push-ups, and crunches based on the data.
 - Point out strengths and what needs work.
 - **Critical Logic:** Remember that when pace (min/mile) goes DOWN, that is GOOD. When reps/weight go UP, that is GOOD.
 
-# 2. REST & RECOVERY ASSESSMENT
+# 2. Rest & Recovery Assessment
 - Discuss the user's recent training frequency. It has been {days_since_workout} days since the last workout.
 - Tell them directly if you think this is too much rest, just right, or too little.
 - Give specific recommendations about training frequency to hit their goals.
 
-# 3. HERE'S HOW WE'LL CLOSE THE GAPS
-Give 5-7 specific, actionable steps.
+# 3. Here's How We'll Close the Gaps
+Give 5-7 specific, actionable steps to improve and hit goals.
 - "For your running, I want you to..."
 - "To hit your push-up goal, start by..."
 - "Your core work needs..."
 - Include specific recovery (e.g., sleep, foam rolling) and nutrition (e.g., protein, hydration) advice.
 - Include mental preparation tips.
 
-# 4. YOUR WORKOUT PLAN
+# 4. Your Workout Plan
 Write this like you are coaching {preferred_name} through their next workout.
-- Provide a plan for their next workout (e.g., "for tomorrow, {(datetime.now().date() + pd.Timedelta(days=1)).strftime('%A, %B %d')}").
+- Provide a plan for their next workout (e.g., "for tomorrow, { (datetime.now().date() + timedelta(days=1)).strftime('%A, %B %d') }").
 - **Warm-up (10 min):** "Start with..." (exact movements, duration)
 - **Main Set (30-35 min):** "Here's what you're running today..." "For push-ups, I want you to..." (Include sets, reps, pace, and RPE targets like "This should feel like a 7/10").
 - **Cool-down (5-10 min):** "Finish with..."
 - **Total Duration**: ~50 minutes
 
-# 5. REAL TALK & MOTIVATION
+# 5. Real Talk & Motivation
 - Give 2-3 sentences speaking directly about where they are and what's possible.
 - Be honest but encouraging.
 - Reference exercise science naturally: "Your VO2max will adapt if we stay consistent..." or "Progressive overload is key for your strength goals, which is why we're..."
