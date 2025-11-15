@@ -90,8 +90,8 @@ def main():
     # --- Two-Button Logic for Control ---
     col1, col2 = st.columns(2)
     with col1:
+        # Re-Sync forces the AI to re-run the full analysis on current data
         if st.button("Re-Sync Metrics", width='stretch'):
-            # This logic triggers a full data fetch and provides an updated intro message
             st.session_state.analysis_done = False 
             st.rerun()
 
@@ -106,27 +106,78 @@ def main():
             st.rerun()
     # --- End Two-Button Logic ---
 
+    # Define the System Prompt and API setup once
+    def get_system_prompt(data_context, name):
+        return f"""
+You are RISE, a highly professional, data-driven performance coach for elite athletes. Your athlete's name is {name}. We are a team focused on optimization.
 
-    # This block runs on initial load or after a "Reset Session"
+**YOUR CONVERSATIONAL PROTOCOL (Crucial):**
+1.  **ALWAYS** provide a comprehensive response that includes a **'full performance review'** and a **'new detailed plan'** based on the 'CURRENT ATHLETE DATA' and their active goals. You must deliver this information in a seamless, conversational flow.
+2.  **NEVER** use a scripted, multi-section format (like numbered sections or fixed headings, e.g., 'Section 1: Performance Review'). Integrate your analysis and plan into a cohesive, encouraging, and direct conversational reply.
+3.  **TONE:** Highly professional, direct, knowledgeable, focused on data, strategy, and optimization, with a light touch of humor. You are supportive and collaborative—a true partner. **Crucially: Do not be demanding, bossy, or rude.**
+4.  **TERMINOLOGY:** Use elite fitness terms: **athlete**, **load management**, **metrics**, **optimization**, **protocol**, **rate of perceived exertion (RPE)**, and **training cycle**.
+5.  **DATA INTEGRATION:** Seamlessly weave in the provided 'CURRENT ATHLETE DATA' to back up your counsel. Do not mention the raw data block.
+6.  **MEMORY:** Always maintain context from the chat history.
+
+**CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
+{data_context}
+"""
+
+    # -------------------------------------------------------------------------
+    # 💥 FIX: This block now performs the initial API call immediately.
+    # -------------------------------------------------------------------------
     if "analysis_done" not in st.session_state:
         with st.spinner("RISE is analyzing your performance metrics..."):
             workouts, goals = get_user_data()
             current_data_context = generate_data_context(workouts, goals)
+            preferred_name = st.session_state.username
 
             if "messages" not in st.session_state:
                 st.session_state.messages = []
+            
+            # Prepare API Request
+            system_prompt = get_system_prompt(current_data_context, preferred_name)
+            
+            # This user message primes the AI to output the required full review and plan
+            initial_request_to_ai = f"RISE online. Welcome back, {preferred_name}. I've synced the latest metrics. Please provide your initial full performance review and a detailed plan for the immediate training block, based only on the provided data."
+            
+            headers = {
+                "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", 
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "grok-beta", 
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": initial_request_to_ai}
+                ],
+                "temperature": 0.6, 
+                "max_tokens": 1024
+            }
+            
+            try:
+                response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    reply = response.json()["choices"][0]["message"]["content"]
+                else:
+                    reply = f"RISE is experiencing a core systems failure. (Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
+            
+            except Exception as e:
+                if "'GROQ_API_KEY'" in str(e):
+                     reply = "RISE is offline. Error: The GROQ_API_KEY is not configured correctly in your Streamlit secrets."
+                else:
+                     reply = f"RISE offline. An unknown error occurred: {e}"
 
-            # Refined, conversational intro message
-            rise_intro = (
-                f"**RISE online. Welcome back, {st.session_state.username}.** "
-                f"We're a team, so let's check the board! I've synthesized the latest metrics, and here is your initial **performance review** and a **detailed plan** for the immediate training block. "
-                f"Give it a read, and let me know your thoughts—no BS, just optimal performance."
-            )
-
-            st.session_state.messages = [
-                {"role": "assistant", "content": rise_intro}
-            ]
+            # Store the AI's generated response and mark analysis as complete
+            st.session_state.messages.append({"role": "assistant", "content": reply})
             st.session_state.analysis_done = True
+            
+            # Rerun to display the initial message immediately
+            st.rerun() 
+    # -------------------------------------------------------------------------
+
 
     # Display the chat history
     for msg in st.session_state.messages:
@@ -154,30 +205,16 @@ def main():
                     # Fetch fresh data context for the current query
                     workouts, goals = get_user_data()
                     current_data_context = generate_data_context(workouts, goals)
-                    
                     preferred_name = st.session_state.username
                     
-                    # --- UPDATED SYSTEM PROMPT ---
-                    system_prompt = f"""
-You are RISE, a highly professional, data-driven performance coach for elite athletes. Your athlete's name is {preferred_name}. We are a team focused on optimization.
-
-**YOUR CONVERSATIONAL PROTOCOL (Crucial):**
-1.  **ALWAYS** provide a comprehensive response that includes a **'full performance review'** and a **'new detailed plan'** based on the 'CURRENT ATHLETE DATA' and their active goals. You must deliver this information in a seamless, conversational flow.
-2.  **NEVER** use a scripted, multi-section format (like numbered sections or fixed headings, e.g., 'Section 1: Performance Review'). Integrate your analysis and plan into a cohesive, encouraging, and direct conversational reply.
-3.  **TONE:** Highly professional, direct, knowledgeable, focused on data, strategy, and optimization, with a light touch of humor. You are supportive and collaborative—a true partner. **Crucially: Do not be demanding, bossy, or rude.**
-4.  **TERMINOLOGY:** Use elite fitness terms: **athlete**, **load management**, **metrics**, **optimization**, **protocol**, **rate of perceived exertion (RPE)**, and **training cycle**.
-5.  **DATA INTEGRATION:** Seamlessly weave in the provided 'CURRENT ATHLETE DATA' to back up your counsel. Do not mention the raw data block.
-6.  **MEMORY:** Always maintain context from the chat history.
-
-**CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
-{current_data_context}
-"""
+                    # Construct system prompt using the helper function
+                    system_prompt = get_system_prompt(current_data_context, preferred_name)
                     
                     payload = {
                         "model": "grok-beta", 
                         "messages": [
                             {"role": "system", "content": system_prompt},
-                            # The chat history is sent here
+                            # The chat history (including the new user prompt) is sent here
                             *st.session_state.messages 
                         ],
                         "temperature": 0.6, 
