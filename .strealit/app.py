@@ -54,147 +54,118 @@ def init_db():
         );
         """
         cur.execute(schema_sql)
+
+        # Check for ianconner and promote him to admin if he exists (setup logic)
+        cur.execute("SELECT id FROM users WHERE username = 'ianconner'")
+        if cur.fetchone():
+            cur.execute("UPDATE users SET role = 'admin' WHERE username = 'ianconner' AND role != 'admin'")
+        
         conn.commit()
-        st.success("Database schema initialized!")  # This will only show on first run now
+        st.session_state['db_initialized'] = True
     except Exception as e:
-        conn.rollback()
-        st.error(f"Schema error: {e}")
+        st.error(f"DB Error: {e}")
     finally:
         cur.close()
         conn.close()
-        
-# ——— SESSION STATE ———
-for key in ['logged_in', 'user_id', 'username', 'role', 'just_logged_in', 'current_page', 'goals_updated']:
-    if key not in st.session_state:
-        st.session_state[key] = None
-st.session_state.logged_in = st.session_state.user_id is not None
 
-# ——— AUTO-PROMOTE ianconner TO ADMIN ———
-if st.session_state.logged_in and st.session_state.username == "ianconner" and st.session_state.role != "admin":
+if 'db_initialized' not in st.session_state:
+    init_db()
+
+# ——— AUTHENTICATION LOGIC ———
+
+def check_password(username, password):
     conn = get_conn()
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE users SET role='admin' WHERE username='ianconner'")
-        conn.commit()
-        st.session_state.role = 'admin'
+        cur.execute("SELECT id, username, role, password FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
+        
+        if user and user[3] == password: # Simple plaintext comparison
+            st.session_state.user_id = user[0]
+            st.session_state.username = user[1]
+            st.session_state.role = user[2]
+            return True
     finally:
         conn.close()
+    return False
+
+def logout():
+    st.session_state.clear()
     st.rerun()
 
-# ——— RISE SIDEBAR ———
 def render_sidebar():
-    st.markdown("""
-    <style>
-    [data-testid="stSidebarNav"] { display: none !important; }
-    a[href*="?page="] { display: none !important; }
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3 { display: none !important; }
+    with st.sidebar:
+        st.markdown(f"## Welcome, **{st.session_state.username}**")
+        st.caption(f"Role: {st.session_state.role.upper()}")
+        st.markdown("---")
 
-    .sidebar .stButton > button {
-        background: linear-gradient(135deg, #1E1E1E, #2A2A2A) !important;
-        color: white !important;
-        border: 1px solid #333 !important;
-        border-radius: 12px !important;
-        padding: 14px !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
-        margin: 10px 0 !important;
-        width: 100% !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
-        transition: all 0.3s ease !important;
-    }
-    .sidebar .stButton > button:hover {
-        background: linear-gradient(135deg, #333, #444) !important;
-        border-color: #00FF88 !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 4px 8px rgba(0,255,136,0.2) !important;
-    }
-    .sidebar .stSuccess {
-        background: #0A0A0A !important;
-        color: #00FF88 !important;
-        border: 1px solid #00FF88 !important;
-        border-radius: 12px !important;
-        padding: 12px !important;
-        text-align: center !important;
-        font-weight: 700 !important;
-        font-size: 18px !important;
-        margin-bottom: 20px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.sidebar.success(f"**{st.session_state.username}**")
-
-    if st.sidebar.button("Home", key="nav_home", use_container_width=True):
-        st.session_state.current_page = "home"
-        st.rerun()
-    if st.sidebar.button("Dashboard", key="nav_dash", use_container_width=True):
-        st.session_state.current_page = "dashboard"
-        st.rerun()
-    if st.sidebar.button("Log Workout", key="nav_log", use_container_width=True):
-        st.session_state.current_page = "log_workout"
-        st.rerun()
-    if st.sidebar.button("Goals", key="nav_goals", use_container_width=True):
-        st.session_state.current_page = "goals"
-        st.rerun()
-    if st.sidebar.button("RISE Coach", key="nav_coach", use_container_width=True):
-        st.session_state.current_page = "ai_coach"
-        st.rerun()
-    if st.session_state.role == 'admin':
-        if st.sidebar.button("Admin", key="nav_admin", use_container_width=True):
-            st.session_state.current_page = "admin"
+        # Navigation
+        st.markdown("### Navigation")
+        
+        # --- HOME BUTTON ELIMINATED HERE ---
+        
+        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
+            st.session_state.current_page = "dashboard"
             st.rerun()
-    
-    if st.sidebar.button("Logout", key="nav_logout", use_container_width=True):
-        for k in list(st.session_state.keys()):
-            del st.session_state[k]
-        st.rerun()
+        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", use_container_width=True):
+            st.session_state.current_page = "log_workout"
+            st.rerun()
+        if st.sidebar.button("🎯 Goals", key="nav_goals", use_container_width=True):
+            st.session_state.current_page = "goals"
+            st.rerun()
+        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", use_container_width=True):
+            st.session_state.current_page = "ai_coach"
+            st.rerun()
 
-# ——— LOGIN / SIGNUP ———
-if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center;'>RISE</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Resilient Integrated Strength Engine</p>", unsafe_allow_html=True)
-    
-    tab1, tab2 = st.tabs(["Login", "Signup"])
+        if st.session_state.role == 'admin':
+            st.markdown("### Admin")
+            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", use_container_width=True):
+                st.session_state.current_page = "admin"
+                st.rerun()
 
-    with tab1:
-        with st.form("main_login_form"):
-            st.write("### Login")
-            username = st.text_input("Username", key="main_login_user")
-            password = st.text_input("Password", type="password", key="main_login_pass")
-            if st.form_submit_button("Login"):
-                if not username or not password:
-                    st.error("Fill both fields.")
+        st.markdown("---")
+        if st.button("Logout", key="logout_button", use_container_width=True):
+            logout()
+
+# ——— MAIN APP FLOW ———
+
+st.set_page_config(
+    page_title="RISE Fitness Tracker",
+    page_icon="🏋️",
+    layout="wide"
+)
+
+if 'user_id' not in st.session_state:
+    st.title("RISE Fitness Tracker")
+    st.info("Log in or sign up to get started.")
+
+    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+
+    with login_tab:
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Log In", type="primary")
+
+            if submitted:
+                if check_password(username, password):
+                    st.session_state.just_logged_in = True
+                    st.rerun()
                 else:
-                    conn = get_conn()
-                    cur = conn.cursor()
-                    try:
-                        cur.execute(
-                            "SELECT id, username, COALESCE(role,'user') FROM users WHERE LOWER(username)=LOWER(%s) AND password=%s",
-                            (username, password)
-                        )
-                        user = cur.fetchone()
-                        if user:
-                            st.session_state.update(dict(zip(['user_id','username','role'], user)))
-                            st.session_state.logged_in = True
-                            st.session_state.just_logged_in = True
-                            st.session_state.current_page = "home"
-                            st.session_state.force_goal_refresh = False
-                            st.rerun()
-                        else:
-                            st.error("Invalid credentials")
-                    finally:
-                        conn.close()
+                    st.error("Invalid username or password.")
 
-    with tab2:
-        with st.form("main_signup_form"):
-            st.write("### Signup")
-            new_user = st.text_input("Username", key="main_signup_user")
-            new_pass = st.text_input("Password", type="password", key="main_signup_pass")
-            if st.form_submit_button("Signup"):
-                if not new_user or not new_pass:
-                    st.error("Fill both fields.")
+    with signup_tab:
+        with st.form("signup_form"):
+            new_user = st.text_input("New Username")
+            new_pass = st.text_input("New Password", type="password")
+            confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass")
+            submitted_signup = st.form_submit_button("Create Account", type="primary")
+
+            if submitted_signup:
+                if not new_user or not new_pass or not confirm_pass:
+                    st.error("All fields are required.")
+                elif new_pass != confirm_pass:
+                    st.error("Passwords do not match.")
                 else:
                     conn = get_conn()
                     cur = conn.cursor()
@@ -219,13 +190,13 @@ else:
         st.success("Logged in!")
         st.rerun()
 
-    page = st.session_state.get("current_page", "home")
+    # Set default page to dashboard and handle routing
+    # FIX: Change default from "home" to "dashboard"
+    page = st.session_state.get("current_page", "dashboard")
 
-    if page == "home":
-        st.markdown(f"## Welcome, **{st.session_state.username}**")
-        st.info("Use the sidebar to navigate.")
+    # The 'home' page routing logic is eliminated.
     
-    elif page == "dashboard":
+    if page == "dashboard":
         import pages.dashboard as p
         p.main()
     elif page == "log_workout":
@@ -241,5 +212,7 @@ else:
         import pages.admin as p
         p.main()
     else:
-        st.session_state.current_page = "home"
-        st.rerun()
+        # Default to dashboard if current_page is somehow invalid
+        st.session_state.current_page = "dashboard"
+        import pages.dashboard as p
+        p.main()
