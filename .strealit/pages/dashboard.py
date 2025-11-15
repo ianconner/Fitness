@@ -67,17 +67,37 @@ def main():
     else:
         st.info("No workouts yet.")
 
+    
+    st.subheader("Active Goals")
     if not df_goals.empty:
-        st.subheader("Active Goals")
         
-        # === FIX ===
         # Convert target_date to datetime objects before using .dt accessor
         df_goals["target_date"] = pd.to_datetime(df_goals["target_date"])
         # Use pd.Timestamp for compatible subtraction
         df_goals["Days Left"] = (df_goals["target_date"] - pd.Timestamp(date.today())).dt.days
-        # === END FIX ===
         
-        df_goals["Status"] = df_goals["Days Left"].apply(lambda x: "On Track" if x > 7 else "Urgent" if x >= 0 else "Overdue")
-        st.dataframe(df_goals[["exercise", "metric_type", "target_value", "target_date", "Days Left", "Status"]], use_container_width=True, hide_index=True)
+        # === AESTHETIC UPDATE ===
+        # Use the status logic with emojis from goals.py
+        df_goals["Status"] = df_goals["Days Left"].apply(
+            lambda x: "🟢 On Track" if x > 7 else "🟡 Urgent" if x >= 0 else "🔴 Overdue"
+        )
+        
+        # Loop and display each goal in its own "card"
+        for idx, row in df_goals.iterrows():
+            with st.container(border=True):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**{row['exercise']}**")
+                    # Clean up the metric type display
+                    metric_display = row['metric_type'].replace('_', ' ').replace('lbs', 'LBs').replace('mi', 'Mi').title()
+                    st.caption(f"Goal: {row['target_value']} {metric_display}")
+                with col2:
+                    st.markdown(f"**{row['Status']}**")
+                    st.caption(f"{row['Days Left']} days left | Due {row['target_date'].strftime('%b %d')}")
+            st.write("") # Adds a small space between cards
+        # === END AESTHETIC UPDATE ===
+            
     else:
         st.info("No active goals.")
+
+}
