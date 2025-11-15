@@ -141,7 +141,7 @@ def main():
             with st.spinner("RISE is thinking..."):
                 try:
                     headers = {
-                        "Authorization": f"Bearer {st.secrets['GROK_API_KEY']}",
+                        "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}",
                         "Content-Type": "application/json"
                     }
                     
