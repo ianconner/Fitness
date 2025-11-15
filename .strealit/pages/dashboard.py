@@ -4,6 +4,7 @@ import pandas as pd
 import psycopg2
 from datetime import date
 import plotly.express as px
+import numpy as np
 
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
@@ -60,17 +61,25 @@ def main():
             
         df_workouts['type'] = df_workouts['exercise'].apply(classify_exercise)
         
-        # 2. Calculate Pace for Cardio (Pace = Time / Distance)
-        # Handle division by zero for accuracy
-        df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi']).fillna(0)
-        df_workouts['pace_min_mi'] = df_workouts['pace_min_mi'].replace([float('inf'), float('-inf')], 0)
+        # === FIX for DivisionByZero ===
+        # Convert columns to numeric, coercing errors to NaN
+        df_workouts['time_min'] = pd.to_numeric(df_workouts['time_min'], errors='coerce')
+        df_workouts['distance_mi'] = pd.to_numeric(df_workouts['distance_mi'], errors='coerce')
         
-        # 3. Format numeric columns for clean display (replace 0/NaN with '-')
+        # Replace 0 with NaN in 'distance_mi' to prevent division by zero
+        df_workouts['distance_mi'] = df_workouts['distance_mi'].replace(0, np.nan)
+        
+        # 2. Calculate Pace for Cardio (Pace = Time / Distance)
+        df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi'])
+        # === END FIX ===
+
+        # 3. Format numeric columns for clean display (replace 0/NaN/inf with '-')
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
-            df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0'], '-').replace(['nan', 'inf'], '-')
+            # Round first, then convert to string and replace
+            df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
         
         for col in ['sets', 'reps']:
-             df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan'], '-')
+             df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan', '<NA>'], '-')
              
         # === DISPLAY ===
         col1, col2, col3 = st.columns(3)
@@ -78,10 +87,10 @@ def main():
             total_workouts = len(df_workouts.drop_duplicates('workout_date'))
             st.metric("Total Workouts", total_workouts)
         with col2:
-            total_duration = df_workouts['duration_min'].sum()
+            total_duration = pd.to_numeric(df_workouts['duration_min'], errors='coerce').sum()
             st.metric("Total Time", f"{int(total_duration)} min")
         with col3:
-            avg_duration = df_workouts.groupby('workout_date')['duration_min'].sum().mean()
+            avg_duration = pd.to_numeric(df_workouts.groupby('workout_date')['duration_min'].sum(), errors='coerce').mean()
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
         # === RECENT WORKOUTS AESTHETIC UPDATE (Card Layout) ===
@@ -110,30 +119,27 @@ def main():
                     
                     if not cardio_df.empty:
                         st.markdown("##### 🏃 Cardio")
-                        # Show Exercise, Time (min), Distance (mi), Pace (min/mi)
                         st.dataframe(
                             cardio_df[['exercise', 'time_min', 'distance_mi', 'pace_min_mi']].rename(
                                 columns={'time_min': 'Time (min)', 'distance_mi': 'Distance (mi)', 'pace_min_mi': 'Pace (min/mi)'}
                             ).set_index('exercise'),
-                            use_container_width=True,
-                            hide_index=False
+                            width='stretch' # Fix deprecation warning
                         )
 
                     if not weight_df.empty:
                         st.markdown("##### 💪 Weight Training")
-                        # Show Exercise, Weight (lbs), Sets, Reps
                         st.dataframe(
                             weight_df[['exercise', 'weight_lbs', 'sets', 'reps']].rename(
                                 columns={'weight_lbs': 'Weight (lbs)', 'sets': 'Sets', 'reps': 'Reps'}
                             ).set_index('exercise'),
-                            use_container_width=True,
-                            hide_index=False
+                            width='stretch' # Fix deprecation warning
                         )
                 st.write("") # Adds a small space between cards
         else:
              st.info("No workouts yet.")
         # === END RECENT WORKOUTS AESTHETIC UPDATE ===
 
+        # Group by 'workout_date' which is already a DATE object
         freq = df_workouts.groupby('workout_date').size().reset_index(name='count')
         fig = px.bar(freq, x='workout_date', y='count', title="Workouts per Day", color_discrete_sequence=["#00FF88"])
         
@@ -141,7 +147,7 @@ def main():
         fig.update_xaxes(tickformat="%b %d")
         
         fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch') # Fix deprecation warning
     else:
         st.info("No workouts yet.")
 
