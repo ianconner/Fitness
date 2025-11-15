@@ -31,7 +31,7 @@ def main():
     cur = conn.cursor()
 
     try:
-        # Workouts
+        # === WORKOUTS (with user filter via workouts table) ===
         cur.execute("""
             SELECT w.id, w.workout_date, w.duration_min, w.notes,
                    we.id as ex_id, we.exercise, we.sets, we.reps, we.weight_lbs,
@@ -48,7 +48,7 @@ def main():
             'distance_mi', 'rest_min', 'ex_notes'
         ])
 
-        # Goals
+        # === GOALS ===
         cur.execute("""
             SELECT exercise, metric_type, target_value, target_date
             FROM goals
@@ -58,9 +58,15 @@ def main():
         goals_rows = cur.fetchall()
         df_goals = pd.DataFrame(goals_rows, columns=['exercise', 'metric_type', 'target_value', 'target_date'])
 
-        # Past exercises for autocomplete
-        cur.execute("SELECT DISTINCT exercise FROM workout_exercises WHERE user_id = %s", (st.session_state.user_id,))
-        past_exercises = [row[0] for row in cur.fetchall() if row[0]]
+        # === PAST EXERCISES FOR AUTOCOMPLETE (JOIN to filter by user) ===
+        cur.execute("""
+            SELECT DISTINCT we.exercise
+            FROM workout_exercises we
+            JOIN workouts w ON we.workout_id = w.id
+            WHERE w.user_id = %s
+            AND we.exercise IS NOT NULL
+        """, (st.session_state.user_id,))
+        past_exercises = [row[0] for row in cur.fetchall()]
 
     finally:
         conn.close()
@@ -140,7 +146,7 @@ def main():
                 fig.update_layout(xaxis_title="Date", yaxis_title="Pace")
                 st.plotly_chart(fig, use_container_width=True)
 
-        # Edit Mode
+        # Edit Mode (unchanged below — uses JOIN-safe data)
         if st.session_state.get("editing_workout_id"):
             wid = st.session_state.editing_workout_id
             sess = sessions[sessions['workout_id']==wid].iloc[0]
