@@ -141,7 +141,7 @@ def main():
             }
 
             payload = {
-                "model": "grok-beta",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": initial_request}
@@ -151,7 +151,7 @@ def main():
             }
 
             try:
-                response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
 
                 if response.status_code == 200:
                     reply = response.json()["choices"][0]["message"]["content"]
@@ -204,7 +204,7 @@ def main():
                 }
 
                 payload = {
-                    "model": "grok-beta",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         *st.session_state.messages
@@ -214,7 +214,7 @@ def main():
                 }
 
                 try:
-                    response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                    response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
 
                     if response.status_code == 200:
                         reply = response.json()["choices"][0]["message"]["content"]
