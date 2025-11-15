@@ -206,7 +206,7 @@ Write this like you are coaching {preferred_name} through their next workout.
 """
                     
                     payload = {
-                        "model": "llama3-70b-8192",
+                        "model": "llama-3.3-70b-versatile",
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             *st.session_state.messages # This includes the full chat history
