@@ -75,8 +75,9 @@ def main():
                     ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=dist_key, step=0.1)
                 
                 # Auto-compute Pace
+                total_time = (ex["time_min"] + ex["rest_min"]) * ex["reps"]
                 if ex["distance_mi"] > 0:
-                    ex["pace_min_mi"] = ex["time_min"] / ex["distance_mi"]
+                    ex["pace_min_mi"] = total_time / ex["distance_mi"]
                     st.caption(f"**Pace: {ex['pace_min_mi']:.2f} min/mi** (auto-computed)")
                 else:
                     ex["pace_min_mi"] = 0.0
