@@ -2,13 +2,11 @@
 import streamlit as st
 import psycopg2
 import hashlib
-import os
-from datetime import datetime
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="RISE Fitness", page_icon="muscle", layout="centered")
+st.set_page_config(page_title="RISE Fitness", page_icon="flexed biceps", layout="centered")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DB
@@ -26,20 +24,9 @@ def hash_password(pwd):
 # LOGIN PAGE
 # ─────────────────────────────────────────────────────────────────────────────
 def show_login():
+    # NEW TITLE
     st.markdown("# Welcome to **RISE**")
-
-    # ── RISE Explanation (Styled) ───────────────────────────────────────
-    st.markdown("""
-    <div style="background:#f0f2f6;padding:16px;border-radius:12px;margin:20px 0;">
-        <p style="margin:0;font-size:1.1em;line-height:1.6;">
-            <strong>RISE</strong> stands for:<br>
-            <strong>R</strong>esilience • <strong>I</strong>ntensity • <strong>S</strong>trength • <strong>E</strong>ndurance
-        </p>
-        <p style="margin:8px 0 0;font-size:0.95em;color:#555;">
-            Your personal AI-powered fitness coach — built to help you track, improve, and exceed your goals.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### *(Resilience, Intensity, Strength, Endurance)*")
 
     st.markdown("### Log in to continue")
 
@@ -71,9 +58,8 @@ def show_login():
                 except Exception as e:
                     st.error(f"Login failed: {e}")
 
-    # ── Sign Up Link ─────────────────────────────────────────────────────
     st.markdown("---")
-    st.markdown("Don't have an account? [Sign up here](#)")  # Replace with actual link later
+    st.markdown("Don't have an account? [Sign up here](#)")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
@@ -85,7 +71,6 @@ def main():
     if not st.session_state.logged_in:
         show_login()
     else:
-        # Sidebar navigation after login
         st.sidebar.success(f"Logged in as User #{st.session_state.user_id}")
         page = st.sidebar.radio("Go to", ["Dashboard", "Log Workout", "Goals", "Profile"])
 
