@@ -1,4 +1,4 @@
-# .strealit/app.py
+# app.py
 import streamlit as st
 import psycopg2
 from sqlalchemy import create_engine
@@ -52,6 +52,13 @@ def init_db():
             rest_min NUMERIC,
             distance_mi NUMERIC
         );
+
+        -- Add notes to workout_exercises if missing
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='workout_exercises' AND column_name='notes') THEN
+                ALTER TABLE workout_exercises ADD COLUMN notes TEXT;
+            END IF;
+        END $$;
         """
         cur.execute(schema_sql)
 
@@ -112,27 +119,27 @@ def render_sidebar():
         st.markdown("### Navigation")
         
         # This is the ONLY set of navigation buttons.
-        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", width='stretch'):
+        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
             st.session_state.current_page = "dashboard"
             st.rerun()
-        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", width='stretch'):
+        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", use_container_width=True):
             st.session_state.current_page = "log_workout"
             st.rerun()
-        if st.sidebar.button("🎯 Goals", key="nav_goals", width='stretch'):
+        if st.sidebar.button("🎯 Goals", key="nav_goals", use_container_width=True):
             st.session_state.current_page = "goals"
             st.rerun()
-        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", width='stretch'):
+        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", use_container_width=True):
             st.session_state.current_page = "ai_coach"
             st.rerun()
 
         if st.session_state.role == 'admin':
             st.markdown("### Admin")
-            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", width='stretch'):
+            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", use_container_width=True):
                 st.session_state.current_page = "admin"
                 st.rerun()
 
         st.markdown("---")
-        if st.button("Logout", key="logout_button", width='stretch'):
+        if st.button("Logout", key="logout_button", use_container_width=True):
             logout()
 
 # ——— MAIN APP FLOW ———
