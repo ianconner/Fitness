@@ -1,7 +1,7 @@
 # pages/admin.py
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 # ——— DATABASE ENGINE ———
 engine = create_engine(st.secrets["POSTGRES_URL"])
@@ -26,20 +26,24 @@ def main():
                 required=True
             )
         },
-        width='stretch', # Fix deprecation warning
+        use_container_width=True,  # Fix deprecation
         hide_index=True
     )
 
-    if st.button("Save Role Changes", type="primary"):
+    if st.button("Save Role Changes", type="primary", use_container_width=True):  # Fix deprecation
         try:
             with engine.connect() as conn:
                 # Start a transaction
                 with conn.begin():
                     for idx, row in edited_df.iterrows():
                         original_row = users_df.iloc[idx]
+                        # Basic validation
+                        if len(str(row["username"])) > 50 or row["username"].strip() == "":
+                            st.error(f"Invalid username for row {idx}")
+                            return
                         if row["role"] != original_row["role"] or row["username"] != original_row["username"]:
                             conn.execute(
-                                st.text("UPDATE users SET role = :role, username = :username WHERE id = :id"),
+                                text("UPDATE users SET role = :role, username = :username WHERE id = :id"),
                                 {"role": row["role"], "username": row["username"], "id": row["id"]}
                             )
                 st.success("Changes saved!")
@@ -47,19 +51,18 @@ def main():
         except Exception as e:
             st.error(f"Error: {e}")
 
-
     # ——— DATABASE RESET ———
     st.subheader("Danger Zone")
     with st.expander("Reset Database (Irreversible)", expanded=False):
         st.warning("This will delete **all** workouts, goals, and reset schema.")
         password = st.text_input("Enter admin password to confirm", type="password")
-        if st.button("NUKE DATABASE", type="secondary"):
+        if st.button("NUKE DATABASE", type="secondary", use_container_width=True):  # Fix deprecation
             if password == st.secrets.get("ADMIN_NUKE_PASS", "default_nuke_pass"):
                 try:
                     with engine.connect() as conn:
-                        with conn.begin(): # Use a transaction
-                            conn.execute(st.text("DROP TABLE IF EXISTS workout_exercises, workouts, goals, users CASCADE"))
-                            conn.execute(st.text("""
+                        with conn.begin():  # Use a transaction
+                            conn.execute(text("DROP TABLE IF EXISTS workout_exercises, workouts, goals, users CASCADE"))
+                            conn.execute(text("""
                                 CREATE TABLE users (
                                     id SERIAL PRIMARY KEY,
                                     username TEXT UNIQUE NOT NULL,
@@ -111,28 +114,27 @@ def main():
     try:
         with col1:
             total_users = pd.read_sql("SELECT COUNT(*) FROM users", engine).iloc[0,0]
-            st.metric("Total Users", total_users)
+            st.metric("Total Users", total_users, delta=None, delta_color="normal")
         with col2:
             total_workouts = pd.read_sql("SELECT COUNT(*) FROM workouts", engine).iloc[0,0]
-            st.metric("Total Workouts", total_workouts)
+            st.metric("Total Workouts", total_workouts, delta=None, delta_color="normal")
         with col3:
             total_goals = pd.read_sql("SELECT COUNT(*) FROM goals", engine).iloc[0,0]
-            st.metric("Total Goals", total_goals)
+            st.metric("Total Goals", total_goals, delta=None, delta_color="normal")
     except Exception as e:
         st.error(f"Could not load stats: {e}")
 
-
     # ——— RAW DATA VIEW ———
-    with st.expander("View Raw Tables"):
+    with st.expander("View Raw Tables", expanded=False):
         tab1, tab2, tab3, tab4 = st.tabs(["Users", "Workouts", "Exercises", "Goals"])
         try:
             with tab1:
-                st.dataframe(pd.read_sql("SELECT * FROM users ORDER BY id", engine), width='stretch') # Fix deprecation warning
+                st.dataframe(pd.read_sql("SELECT * FROM users ORDER BY id", engine), use_container_width=True)  # Fix deprecation
             with tab2:
-                st.dataframe(pd.read_sql("SELECT * FROM workouts ORDER BY workout_date DESC", engine), width='stretch') # Fix deprecation warning
+                st.dataframe(pd.read_sql("SELECT * FROM workouts ORDER BY workout_date DESC", engine), use_container_width=True)  # Fix deprecation
             with tab3:
-                st.dataframe(pd.read_sql("SELECT * FROM workout_exercises ORDER BY id DESC", engine), width='stretch') # Fix deprecation warning
+                st.dataframe(pd.read_sql("SELECT * FROM workout_exercises ORDER BY id DESC", engine), use_container_width=True)  # Fix deprecation
             with tab4:
-                st.dataframe(pd.read_sql("SELECT * FROM goals ORDER BY target_date", engine), width='stretch') # Fix deprecation warning
+                st.dataframe(pd.read_sql("SELECT * FROM goals ORDER BY target_date", engine), use_container_width=True)  # Fix deprecation
         except Exception as e:
             st.error(f"Could not load tables: {e}")
