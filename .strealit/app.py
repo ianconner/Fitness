@@ -95,6 +95,15 @@ def logout():
 
 def render_sidebar():
     with st.sidebar:
+        # === FIX FOR DOUBLE BUTTONS ===
+        # This CSS hack hides the default Streamlit sidebar navigation
+        st.markdown("""
+        <style>
+            [data-testid="stSidebarNav"] { display: none !important; }
+        </style>
+        """, unsafe_allow_html=True)
+        # === END FIX ===
+
         st.markdown(f"## Welcome, **{st.session_state.username}**")
         st.caption(f"Role: {st.session_state.role.upper()}")
         st.markdown("---")
