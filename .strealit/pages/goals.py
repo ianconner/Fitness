@@ -154,35 +154,48 @@ def main():
                             st.session_state.editing_goal_id = None
                             st.rerun()
                     
-                    st.divider()
+                    st.write("") # Add space after edit form
+                
                 else:
-                    # Display mode
-                    st.markdown(f"### {row['exercise']}")
-                    
-                    col_info, col_buttons = st.columns([5, 1])
-                    with col_info:
-                        st.write(f"**{row['metric_type'].replace('_', ' ').title()}:** {row['target_value']} | **Due:** {row['target_date'].strftime('%b %d, %Y')} | **Status:** {row['Progress']}")
-                    
-                    with col_buttons:
-                        if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal"):
-                            st.session_state.editing_goal_id = goal_id
-                            st.rerun()
-                        if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal"):
-                            conn_del = get_conn()
-                            cur_del = conn_del.cursor()
-                            try:
-                                cur_del.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (goal_id, st.session_state.user_id))
-                                conn_del.commit()
-                                st.success("Goal deleted!")
-                                time.sleep(0.5)
+                    # Display mode - Card Design
+                    with st.container(border=True):
+                        col_main, col_status = st.columns([3, 1])
+                        
+                        with col_main:
+                            st.markdown(f"**{row['exercise']}**")
+                            # Clean up the metric type display
+                            metric_display = row['metric_type'].replace('_', ' ').replace('lbs', 'LBs').replace('mi', 'Mi').title()
+                            st.caption(f"Goal: **{row['target_value']} {metric_display}** | Due: {row['target_date'].strftime('%b %d, %Y')}")
+                        
+                        with col_status:
+                            st.markdown(f"**{row['Progress']}**")
+                            st.caption(f"{row['Days Left']} days left")
+                        
+                        # Add buttons at the bottom of the card
+                        st.markdown("---")
+                        col_edit, col_delete = st.columns(2)
+                        with col_edit:
+                            if st.button("✏️ Edit", key=f"edit_{goal_id}", use_container_width=True):
+                                st.session_state.editing_goal_id = goal_id
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                            finally:
-                                cur_del.close()
-                                conn_del.close()
+                        with col_delete:
+                            if st.button("🗑️ Delete", key=f"delete_{goal_id}", use_container_width=True, type="secondary"):
+                                conn_del = get_conn()
+                                cur_del = conn_del.cursor()
+                                try:
+                                    cur_del.execute("DELETE FROM goals WHERE id=%s AND user_id=%s", (goal_id, st.session_state.user_id))
+                                    conn_del.commit()
+                                    st.success("Goal deleted!")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                                finally:
+                                    cur_del.close()
+                                    conn_del.close()
                     
-                    st.divider()
+                    st.write("") # Adds a small space between cards
+
         else:
             st.info("No goals yet. Add one above!")
             
