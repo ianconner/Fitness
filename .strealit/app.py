@@ -102,28 +102,28 @@ def render_sidebar():
         # Navigation
         st.markdown("### Navigation")
         
-        # This is the ONLY set of navigation buttons rendered.
-        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
+        # This is the ONLY set of navigation buttons.
+        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", width='stretch'):
             st.session_state.current_page = "dashboard"
             st.rerun()
-        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", use_container_width=True):
+        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", width='stretch'):
             st.session_state.current_page = "log_workout"
             st.rerun()
-        if st.sidebar.button("🎯 Goals", key="nav_goals", use_container_width=True):
+        if st.sidebar.button("🎯 Goals", key="nav_goals", width='stretch'):
             st.session_state.current_page = "goals"
             st.rerun()
-        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", use_container_width=True):
+        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", width='stretch'):
             st.session_state.current_page = "ai_coach"
             st.rerun()
 
         if st.session_state.role == 'admin':
             st.markdown("### Admin")
-            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", use_container_width=True):
+            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", width='stretch'):
                 st.session_state.current_page = "admin"
                 st.rerun()
 
         st.markdown("---")
-        if st.button("Logout", key="logout_button", use_container_width=True):
+        if st.button("Logout", key="logout_button", width='stretch'):
             logout()
 
 # ——— MAIN APP FLOW ———
