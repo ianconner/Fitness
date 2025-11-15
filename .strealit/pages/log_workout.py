@@ -19,14 +19,31 @@ def main():
             exercises = [{"exercise": "", "sets": 3, "reps": 10, "weight_lbs": 0.0, "time_min": 0.0, "rest_min": 1.5, "distance_mi": 0.0}]
 
         for i, ex in enumerate(exercises):
-            col1, col2, col3, col4, col5, col6, col7 = st.columns([3,1,1,1,1,1,1])
-            with col1: ex["exercise"] = st.text_input(f"Exercise {i+1}", value=ex["exercise"], key=f"name_{i}")
-            with col2: ex["sets"] = st.number_input("Sets", min_value=1, value=ex["sets"], key=f"sets_{i}")
-            with col3: ex["reps"] = st.number_input("Reps", min_value=1, value=ex["reps"], key=f"reps_{i}")
-            with col4: ex["weight_lbs"] = st.number_input("Weight", min_value=0.0, value=ex["weight_lbs"], key=f"weight_{i}")
-            with col5: ex["time_min"] = st.number_input("Time", min_value=0.0, value=ex["time_min"], key=f"time_{i}")
-            with col6: ex["rest_min"] = st.number_input("Rest", min_value=0.0, value=ex["rest_min"], key=f"rest_{i}")
-            with col7: ex["distance_mi"] = st.number_input("Dist", min_value=0.0, value=ex["distance_mi"], key=f"dist_{i}")
+            st.markdown(f"**Exercise {i+1}**")
+            col1, col2, col3 = st.columns([2,1,1])
+            with col1: 
+                ex["exercise"] = st.text_input("Name", value=ex["exercise"], key=f"name_{i}")
+            
+            # Weight Training
+            col_w1, col_w2, col_w3, col_w4 = st.columns(4)
+            with col_w1:
+                ex["weight_lbs"] = st.number_input("Weight (lbs)", min_value=0.0, value=ex["weight_lbs"], key=f"weight_{i}", step=5.0)
+            with col_w2: 
+                ex["sets"] = st.number_input("Sets", min_value=1, value=ex["sets"], key=f"sets_{i}")
+            with col_w3: 
+                ex["reps"] = st.number_input("Reps", min_value=1, value=ex["reps"], key=f"reps_{i}")
+            with col_w4:
+                ex["rest_min"] = st.number_input("Rest (min)", min_value=0.0, value=ex["rest_min"], key=f"rest_{i}", step=0.5)
+
+            # Cardio
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=f"dist_{i}", step=0.1)
+            with col_c2:
+                ex["time_min"] = st.number_input("Time (min)", min_value=0.0, value=ex["time_min"], key=f"time_{i}", step=1.0)
+            
+            st.divider()
+
 
         col_add, col_remove = st.columns(2)
         with col_add:
