@@ -206,7 +206,7 @@ Write this like you are coaching {preferred_name} through their next workout.
 """
                     
                     payload = {
-                        "model": "grok-beta",
+                        "model": "llama3-70b-8192",
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             *st.session_state.messages # This includes the full chat history
@@ -215,7 +215,7 @@ Write this like you are coaching {preferred_name} through their next workout.
                         "max_tokens": 1024
                     }
                     
-                    response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                    response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
                     
                     if response.status_code == 200:
                         reply = response.json()["choices"][0]["message"]["content"]
