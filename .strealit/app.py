@@ -102,7 +102,7 @@ def render_sidebar():
         # Navigation
         st.markdown("### Navigation")
         
-        # Only keeping the primary navigation buttons (the "bottom set")
+        # This is the ONLY set of navigation buttons rendered.
         if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
             st.session_state.current_page = "dashboard"
             st.rerun()
