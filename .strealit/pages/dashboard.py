@@ -66,4 +66,16 @@ def main():
              df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         
         # 2. Replace 0 with NaN in 'distance_mi' to prevent division by zero
-        df_workouts['distance_mi']
+        df_workouts['distance_mi'] = df_workouts['distance_mi'].replace(0, np.nan)
+        
+        # 3. Calculate Pace for Cardio (Pace = Time / Distance)
+        df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi'])
+        # === END FIX ===
+
+        # 4. Format numeric columns for clean display (replace 0/NaN/inf with '-')
+        # Now that all are numeric, .round() will work.
+        for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
+            df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
+        
+        for col in ['sets', 'reps', 'rest_min']:
+             df_workouts[col] = df_workouts[col].astype(str
