@@ -13,6 +13,12 @@ engine = create_engine(st.secrets["POSTGRES_URL"])
 # Define the RISE avatar URL globally
 RISE_AVATAR_URL = "https://api.dicebear.com/7.x/bottts/svg?seed=RISE"
 
+# --- Groq API Configuration ---
+# Use a highly capable Groq-available model as the default
+GROQ_MODEL = "mixtral-8x7b-32768"
+GROQ_API_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+# --- End Groq API Configuration ---
+
 def get_user_data():
     """Fetches the user's latest 20 workouts and active goals."""
     try:
@@ -75,8 +81,9 @@ def generate_data_context(workouts, goals):
         for _, g in goals.iterrows():
             # Ensure target_date is a datetime.date object for calculation
             target_date = pd.to_datetime(g['target_date']).date()
-            days_left = (target_date - datetime.now().date()).days
-            status = "ON TRACK" if days_left > 7 else "URGENT" if days_left >= 0 else "OVERDUE"
+            days_left_status = (target_date - datetime.now().date()).days
+            status = "ON TRACK" if days_left_status > 7 else "URGENT" if days_left_status >= 0 else "OVERDUE"
+            
             insight += f"  → {g['exercise']} to hit {g['target_value']} {g['metric_type'].replace('_', ' ')} by {target_date} [{status}]\n"
     
     # Include raw workout data for deep analysis
@@ -124,7 +131,7 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
 """
 
     # -------------------------------------------------------------------------
-    # 💥 FIX: This block now performs the initial API call immediately.
+    # 💥 FIX: Initial AI Call (Proactive Data Push)
     # -------------------------------------------------------------------------
     if "analysis_done" not in st.session_state:
         with st.spinner("RISE is analyzing your performance metrics..."):
@@ -142,12 +149,14 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
             initial_request_to_ai = f"RISE online. Welcome back, {preferred_name}. I've synced the latest metrics. Please provide your initial full performance review and a detailed plan for the immediate training block, based only on the provided data."
             
             headers = {
+                # FIX: Use the correct Groq API Key
                 "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", 
                 "Content-Type": "application/json"
             }
             
             payload = {
-                "model": "grok-beta", 
+                # FIX: Use a Groq-available model
+                "model": GROQ_MODEL, 
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": initial_request_to_ai}
@@ -157,12 +166,13 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
             }
             
             try:
-                response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                # FIX: Use the correct Groq API Endpoint
+                response = requests.post(GROQ_API_ENDPOINT, json=payload, headers=headers, timeout=30)
                 
                 if response.status_code == 200:
                     reply = response.json()["choices"][0]["message"]["content"]
                 else:
-                    reply = f"RISE is experiencing a core systems failure. (Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
+                    reply = f"RISE is experiencing a core systems failure. (API Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
             
             except Exception as e:
                 if "'GROQ_API_KEY'" in str(e):
@@ -198,6 +208,7 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
                 try:
                     # 3. Prepare for Groq API call
                     headers = {
+                        # FIX: Use the correct Groq API Key
                         "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", 
                         "Content-Type": "application/json"
                     }
@@ -211,7 +222,8 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
                     system_prompt = get_system_prompt(current_data_context, preferred_name)
                     
                     payload = {
-                        "model": "grok-beta", 
+                        # FIX: Use a Groq-available model
+                        "model": GROQ_MODEL, 
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             # The chat history (including the new user prompt) is sent here
@@ -221,12 +233,13 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
                         "max_tokens": 1024
                     }
                     
-                    response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                    # FIX: Use the correct Groq API Endpoint
+                    response = requests.post(GROQ_API_ENDPOINT, json=payload, headers=headers, timeout=30)
                     
                     if response.status_code == 200:
                         reply = response.json()["choices"][0]["message"]["content"]
                     else:
-                        reply = f"RISE is experiencing a core systems failure. (Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
+                        reply = f"RISE is experiencing a core systems failure. (API Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
                 
                 except Exception as e:
                     if "'GROQ_API_KEY'" in str(e):
