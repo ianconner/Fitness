@@ -21,28 +21,39 @@ def main():
         for i, ex in enumerate(exercises):
             st.markdown(f"**Exercise {i+1}**")
             
-            # Category Selection with callback for reactivity
-            def update_category(i):
-                ex["category"] = st.session_state[f"temp_cat_{i}"]
-                st.rerun()
-            
+            # Category Selection (persists via key; changes visible after preview/rerun)
             category_key = f"cat_{i}"
             if category_key not in st.session_state:
                 st.session_state[category_key] = ex["category"] or ""
             
-            selected_category = st.selectbox("Category", ["", "Cardio", "Weights"], index=0 if not st.session_state[category_key] else ["Cardio", "Weights"].index(st.session_state[category_key]), key=f"temp_cat_{i}", on_change=lambda: update_category(i))
+            selected_category = st.selectbox("Category", ["", "Cardio", "Weights"], index=0 if not st.session_state[category_key] else ["Cardio", "Weights"].index(st.session_state[category_key]), key=category_key)
             ex["category"] = selected_category
             
+            # Preview Button for Reactivity (triggers rerun to show/hide inputs)
+            if st.button(f"Preview Exercise {i+1}", key=f"preview_{i}"):
+                st.rerun()
+            
             # Sub-Category (only if category selected)
+            sub_category_key = f"sub_{i}"
             sub_category = ""
             if ex["category"]:
                 if ex["category"] == "Cardio":
-                    sub_category = st.selectbox("Sub-Category", ["Running", "Walking", "Elliptical", "Other"], key=f"sub_{i}")
+                    sub_options = ["Running", "Walking", "Elliptical", "Other"]
+                    if sub_category_key not in st.session_state:
+                        st.session_state[sub_category_key] = "Running"  # Default
+                    selected_sub = st.selectbox("Sub-Category", sub_options, index=sub_options.index(st.session_state[sub_category_key]), key=sub_category_key)
+                    st.session_state[sub_category_key] = selected_sub
+                    sub_category = selected_sub
                 elif ex["category"] == "Weights":
-                    sub_category = st.selectbox("Sub-Category", ["Free-Weights", "Machine", "Body-Weights"], key=f"sub_{i}")
+                    sub_options = ["Free-Weights", "Machine", "Body-Weights"]
+                    if sub_category_key not in st.session_state:
+                        st.session_state[sub_category_key] = "Free-Weights"  # Default
+                    selected_sub = st.selectbox("Sub-Category", sub_options, index=sub_options.index(st.session_state[sub_category_key]), key=sub_category_key)
+                    st.session_state[sub_category_key] = selected_sub
+                    sub_category = selected_sub
                 ex["sub_category"] = sub_category
             
-            # Conditional Inputs Based on Category (now reactive via session_state)
+            # Conditional Inputs Based on Category (updates on preview/rerun)
             if ex["category"] == "Cardio":
                 col_time, col_dist = st.columns(2)
                 with col_time:
@@ -78,7 +89,7 @@ def main():
                 ex["pace_min_mi"] = 0.0
                 
             else:
-                st.warning("Select a category to enable inputs.")
+                st.warning("Select a category and click 'Preview' to enable inputs.")
                 # Reset all fields
                 ex["sets"] = 3
                 ex["reps"] = 10
@@ -88,12 +99,14 @@ def main():
                 ex["pace_min_mi"] = 0.0
             
             # Exercise Name (auto-prefix with category/sub for dashboard/AI filtering)
-            base_name = st.text_input("Specific Exercise (e.g., '5K Trail' or 'Bench Press')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=f"base_name_{i}")
+            base_name_key = f"base_name_{i}"
+            base_name = st.text_input("Specific Exercise (e.g., '5K Trail' or 'Bench Press')", value=ex["exercise"].split(": ", 1)[-1] if ": " in ex["exercise"] else ex["exercise"], key=base_name_key)
             full_exercise = f"{ex['category']} - {ex['sub_category']}: {base_name}".strip(": ") if ex["category"] and ex["sub_category"] else base_name
             ex["exercise"] = full_exercise
             
             # Per-Exercise Notes (coupled with each exercise for AI accuracy)
-            ex["notes"] = st.text_area("Notes (AI Context)", value=ex["notes"], key=f"notes_{i}", help="Detailed notes for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
+            notes_key = f"notes_{i}"
+            ex["notes"] = st.text_area("Notes (AI Context)", value=ex["notes"], key=notes_key, help="Detailed notes for RISE Coach (e.g., 'Trail was muddy, focused on form; RPE 7/10')")
             
             # Optional Rest (per-exercise)
             ex["rest_min"] = st.number_input("Rest Between Sets (min)", min_value=0.0, value=ex["rest_min"], key=f"rest_{i}", step=0.5)
@@ -121,7 +134,7 @@ def main():
                 conn = get_conn()
                 cur = conn.cursor()
                 try:
-                    # Insert workout (session-level, no overall notes)
+                    # Insert workout (session-level, empty overall notes)
                     cur.execute(
                         "INSERT INTO workouts (user_id, workout_date, notes, duration_min) VALUES (%s, %s, %s, %s) RETURNING id",
                         (st.session_state.user_id, workout_date, "", duration_min)
@@ -137,7 +150,14 @@ def main():
                             )
                     conn.commit()
                     st.success("Workout session saved! Exercises logged for dashboard & RISE analysis.")
+                    # Clear session state keys for next use
+                    for j in range(len(exercises)):
+                        st.session_state.pop(f"cat_{j}", None)
+                        st.session_state.pop(f"sub_{j}", None)
+                        st.session_state.pop(f"base_name_{j}", None)
+                        st.session_state.pop(f"notes_{j}", None)
                     st.session_state.pop("exercises", None)
+                    st.rerun()
                 except Exception as e:
                     conn.rollback()
                     st.error(f"Error: {e}")
