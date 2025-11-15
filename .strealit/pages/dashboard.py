@@ -70,7 +70,8 @@ def main():
         
         # 3. Calculate Pace for Cardio (Pace = Time / Distance)
         df_workouts['pace_min_mi'] = (df_workouts['time_min'] / df_workouts['distance_mi'])
-        
+        # === END FIX ===
+
         # 4. Format numeric columns for clean display (replace 0/NaN/inf with '-')
         # Now that all are numeric, .round() will work.
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
@@ -95,8 +96,6 @@ def main():
         st.subheader("Recent Workouts")
         if "editing_workout_id" not in st.session_state:
             st.session_state.editing_workout_id = None
-        if "confirm_delete_id" not in st.session_state:
-            st.session_state.confirm_delete_id = None
 
         sessions = df_workouts[['workout_id', 'workout_date', 'duration_min', 'notes']].drop_duplicates().sort_values('workout_date', ascending=False).head(5)
 
@@ -142,44 +141,30 @@ def main():
                         with col_edit:
                             if st.button("✏️ Edit", key=f"edit_{session_id}"):
                                 st.session_state.editing_workout_id = session_id
-                                st.session_state.confirm_delete_id = None
                                 st.rerun()
                         with col_delete:
                             if st.button("🗑️ Delete", key=f"del_{session_id}", type="secondary"):
                                 if st.session_state.editing_workout_id != session_id:  # Prevent during edit
-                                    st.session_state.confirm_delete_id = session_id
-                                    st.session_state.editing_workout_id = None
-                                    st.rerun()
+                                    if st.button("Confirm Delete"):
+                                        conn_del = get_conn()
+                                        cur_del = conn_del.cursor()
+                                        try:
+                                            cur_del.execute("DELETE FROM workout_exercises WHERE workout_id = %s", (session_id,))
+                                            cur_del.execute("DELETE FROM workouts WHERE id = %s AND user_id = %s", (session_id, st.session_state.user_id))
+                                            conn_del.commit()
+                                            st.success("Workout deleted!")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+                                        finally:
+                                            cur_del.close()
+                                            conn_del.close()
+                                        st.rerun()
+                                    if st.button("Cancel"):
+                                        st.rerun()
 
                 with col_right:
                     if idx % 2 == 1:  # Spacer for even grid
                         st.empty()
-
-            # Confirm Delete Dialog
-            if st.session_state.confirm_delete_id:
-                st.warning("Are you sure you want to delete this workout? This can't be undone.")
-                col_confirm, col_cancel = st.columns(2)
-                with col_confirm:
-                    if st.button("Confirm Delete"):
-                        session_id = st.session_state.confirm_delete_id
-                        conn_del = get_conn()
-                        cur_del = conn_del.cursor()
-                        try:
-                            cur_del.execute("DELETE FROM workout_exercises WHERE workout_id = %s", (session_id,))
-                            cur_del.execute("DELETE FROM workouts WHERE id = %s AND user_id = %s", (session_id, st.session_state.user_id))
-                            conn_del.commit()
-                            st.success("Workout deleted!")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-                        finally:
-                            cur_del.close()
-                            conn_del.close()
-                            st.session_state.confirm_delete_id = None
-                            st.rerun()
-                with col_cancel:
-                    if st.button("Cancel"):
-                        st.session_state.confirm_delete_id = None
-                        st.rerun()
 
             # === POPUP EDIT MODE (Expander as Modal) ===
             if st.session_state.editing_workout_id:
@@ -208,20 +193,20 @@ def main():
                         # Weight Training
                         col_w1, col_w2, col_w3, col_w4 = st.columns(4)
                         with col_w1:
-                            ex["weight_lbs"] = st.number_input("Weight (lbs)", min_value=0.0, value=ex["weight_lbs"], key=f"edit_weight_{i}", step=5.0)
+                            ex["weight_lbs"] = st.number_input("Weight (lbs)", min_value=0.0, value=float(ex["weight_lbs"]), key=f"edit_weight_{i}", step=5.0)
                         with col_w2: 
-                            ex["sets"] = st.number_input("Sets", min_value=1, value=ex["sets"], key=f"edit_sets_{i}")
+                            ex["sets"] = st.number_input("Sets", min_value=1, value=int(ex["sets"]), key=f"edit_sets_{i}", step=1)
                         with col_w3: 
-                            ex["reps"] = st.number_input("Reps", min_value=1, value=ex["reps"], key=f"edit_reps_{i}")
+                            ex["reps"] = st.number_input("Reps", min_value=1, value=int(ex["reps"]), key=f"edit_reps_{i}", step=1)
                         with col_w4:
-                            ex["rest_min"] = st.number_input("Rest (min)", min_value=0.0, value=ex["rest_min"], key=f"edit_rest_{i}", step=0.5)
+                            ex["rest_min"] = st.number_input("Rest (min)", min_value=0.0, value=float(ex["rest_min"]), key=f"edit_rest_{i}", step=0.5)
 
                         # Cardio
                         col_c1, col_c2 = st.columns(2)
                         with col_c1:
-                            ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=f"edit_dist_{i}", step=0.1)
+                            ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=float(ex["distance_mi"]), key=f"edit_dist_{i}", step=0.1)
                         with col_c2:
-                            ex["time_min"] = st.number_input("Time (min)", min_value=0.0, value=ex["time_min"], key=f"edit_time_{i}", step=1.0)
+                            ex["time_min"] = st.number_input("Time (min)", min_value=0.0, value=float(ex["time_min"]), key=f"edit_time_{i}", step=1.0)
                         
                         st.divider()
 
