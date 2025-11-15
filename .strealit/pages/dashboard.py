@@ -5,6 +5,7 @@ import psycopg2
 from datetime import date
 import numpy as np
 import plotly.express as px
+import re
 
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
@@ -23,6 +24,34 @@ def parse_exercise_name(exercise_str):
             return cat_sub, None, name
     return None, None, name
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTO-DETECT PACE GOAL: "Run 2 miles in 18 min" → 9.0 min/mi
+# ─────────────────────────────────────────────────────────────────────────────
+def extract_pace_goal(goal_text):
+    """
+    Input: "Run 2 miles in 18 min" or "2 mile run under 20 minutes"
+    Output: (distance_mi, total_time_min) or (None, None)
+    """
+    text = goal_text.lower()
+
+    # Extract distance (miles)
+    dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', text)
+    distance = float(dist_match.group(1)) if dist_match else None
+
+    # Extract time (minutes)
+    time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)
+    total_time = float(time_match.group(1)) if time_match else None
+
+    if distance and total_time and distance > 0:
+        return distance, total_time
+    return None, None
+
+def calculate_pace_min_mi(distance_mi, total_time_min):
+    return total_time_min / distance_mi if distance_mi and distance_mi > 0 else None
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────────
 def main():
     st.markdown("## Dashboard")
     st.markdown("Your fitness journey at a glance.")
@@ -31,7 +60,7 @@ def main():
     cur = conn.cursor()
 
     try:
-        # === WORKOUTS (with user filter via workouts table) ===
+        # Workouts
         cur.execute("""
             SELECT w.id, w.workout_date, w.duration_min, w.notes,
                    we.id as ex_id, we.exercise, we.sets, we.reps, we.weight_lbs,
@@ -48,7 +77,7 @@ def main():
             'distance_mi', 'rest_min', 'ex_notes'
         ])
 
-        # === GOALS ===
+        # Goals
         cur.execute("""
             SELECT exercise, metric_type, target_value, target_date
             FROM goals
@@ -58,31 +87,31 @@ def main():
         goals_rows = cur.fetchall()
         df_goals = pd.DataFrame(goals_rows, columns=['exercise', 'metric_type', 'target_value', 'target_date'])
 
-        # === PAST EXERCISES FOR AUTOCOMPLETE (JOIN to filter by user) ===
+        # Past exercises for autocomplete
         cur.execute("""
             SELECT DISTINCT we.exercise
             FROM workout_exercises we
             JOIN workouts w ON we.workout_id = w.id
-            WHERE w.user_id = %s
-            AND we.exercise IS NOT NULL
+            WHERE w.user_id = %s AND we.exercise IS NOT NULL
         """, (st.session_state.user_id,))
         past_exercises = [row[0] for row in cur.fetchall()]
 
     finally:
         conn.close()
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # DATA PREP
+    # ─────────────────────────────────────────────────────────────────────────
     if not df_workouts.empty:
-        # Classify
         cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike']
         def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
         df_workouts['type'] = df_workouts['exercise'].apply(classify)
 
-        # Numeric
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'sets', 'reps', 'rest_min']:
             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         df_workouts['distance_mi'] = df_workouts['distance_mi'].replace(0, np.nan)
 
-        # CORRECT PACE: ((time + rest) * reps) / distance
+        # PACE: ((time + rest) * reps) / distance
         df_workouts['total_effort'] = (df_workouts['time_min'] + df_workouts['rest_min']) * df_workouts['reps']
         df_workouts['pace_min_mi'] = df_workouts['total_effort'] / df_workouts['distance_mi']
 
@@ -135,18 +164,36 @@ def main():
             with c2:
                 if idx % 2 == 1: st.empty()
 
-        # Pace Chart
+        # ─────────────────────────────────────────────────────────────────────
+        # PACE CHART: DATES ONLY
+        # ─────────────────────────────────────────────────────────────────────
         if not df_workouts[df_workouts['type'] == 'Cardio'].empty:
             st.subheader("Pace Trend")
             pace_df = df_workouts[df_workouts['type'] == 'Cardio'].copy()
             pace_df['pace'] = pd.to_numeric(pace_df['pace_min_mi'], errors='coerce')
             pace_df = pace_df.dropna(subset=['pace'])
             if not pace_df.empty:
-                fig = px.line(pace_df, x='workout_date', y='pace', color='exercise', markers=True, title="Pace (min/mi)")
-                fig.update_layout(xaxis_title="Date", yaxis_title="Pace")
+                pace_df['date_only'] = pd.to_datetime(pace_df['workout_date']).dt.date
+                fig = px.line(
+                    pace_df,
+                    x='date_only',
+                    y='pace',
+                    color='exercise',
+                    markers=True,
+                    title="Pace (min/mi) Over Time"
+                )
+                fig.update_layout(
+                    xaxis_title="Date",
+                    yaxis_title="Pace (min/mi)",
+                    xaxis=dict(tickformat="%b %d")
+                )
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No cardio pace data yet.")
 
-        # Edit Mode (unchanged below — uses JOIN-safe data)
+        # ─────────────────────────────────────────────────────────────────────
+        # EDIT MODE (unchanged)
+        # ─────────────────────────────────────────────────────────────────────
         if st.session_state.get("editing_workout_id"):
             wid = st.session_state.editing_workout_id
             sess = sessions[sessions['workout_id']==wid].iloc[0]
@@ -267,30 +314,82 @@ def main():
     else:
         st.info("No workouts yet.")
 
-    # Goals with Progress
+    # ─────────────────────────────────────────────────────────────────────────
+    # GOALS: AUTO-DETECT PACE + SMART PROGRESS
+    # ─────────────────────────────────────────────────────────────────────────
     st.subheader("Active Goals")
     if not df_goals.empty:
         progress = {}
-        for _, g in df_goals.iterrows():
-            latest = df_workouts[df_workouts['exercise'].str.contains(g['exercise'], case=False, na=False)]
-            val = 0
-            if not latest.empty and g['metric_type'] in ['weight_lbs', 'distance_mi', 'time_min']:
-                val = pd.to_numeric(latest[g['metric_type']], errors='coerce').max()
-            progress[g['exercise']] = val
 
         for _, row in df_goals.iterrows():
-            target = float(row['target_value'])
-            current = progress.get(row['exercise'], 0)
-            pct = min(current / target * 100, 100) if target else 0
+            exercise = row['exercise']
+            target_date = row['target_date']
+            days_left = (pd.to_datetime(target_date) - pd.Timestamp.today()).days
+
+            # Try to auto-detect pace goal
+            dist, total_time = extract_pace_goal(exercise)
+            if dist and total_time:
+                goal_pace = calculate_pace_min_mi(dist, total_time)
+                # Find best (lowest) pace for this exercise
+                matches = df_workouts[
+                    df_workouts['exercise'].str.contains(re.escape(exercise.split(" in ")[0]), case=False, na=False) &
+                    (df_workouts['type'] == 'Cardio')
+                ]
+                if not matches.empty:
+                    paces = pd.to_numeric(matches['pace_min_mi'], errors='coerce')
+                    current_pace = paces.min()
+                else:
+                    current_pace = None
+
+                if current_pace and current_pace > 0:
+                    pct = min((goal_pace / current_pace) * 100, 150)
+                    status = "Exceeding!" if pct > 100 else "On Track"
+                else:
+                    pct = 0
+                    status = "No data"
+
+                progress[exercise] = {
+                    'type': 'pace',
+                    'goal_pace': goal_pace,
+                    'current_pace': current_pace,
+                    'pct': pct,
+                    'status': status
+                }
+            else:
+                # Non-pace goal
+                metric = row['metric_type']
+                target = float(row['target_value'])
+                matches = df_workouts[df_workouts['exercise'].str.contains(exercise, case=False, na=False)]
+                current = 0
+                if not matches.empty and metric in matches.columns:
+                    current = pd.to_numeric(matches[metric], errors='coerce').max()
+                pct = min((current / target) * 100, 150) if target > 0 else 0
+                progress[exercise] = {
+                    'type': 'value',
+                    'current': current,
+                    'target': target,
+                    'pct': pct
+                }
+
+        # Display
+        for _, row in df_goals.iterrows():
+            exercise = row['exercise']
+            data = progress.get(exercise, {'type': 'value', 'pct': 0})
             days_left = (pd.to_datetime(row['target_date']) - pd.Timestamp.today()).days
+
             with st.container(border=True):
                 c1, c2 = st.columns([3, 1])
                 with c1:
-                    st.markdown(f"**{row['exercise']}**")
-                    st.caption(f"Goal: {target} {row['metric_type'].replace('_', ' ')} | Current: {current}")
-                    st.progress(pct / 100)
+                    st.markdown(f"**{exercise}**")
+                    if data['type'] == 'pace':
+                        st.caption(f"Goal: {data['goal_pace']:.2f} min/mi | Best: {data['current_pace']:.2f} min/mi" if data['current_pace'] else f"Goal: {data['goal_pace']:.2f} min/mi | No data")
+                    else:
+                        st.caption(f"Goal: {data['target']} {row['metric_type'].replace('_', ' ')} | Current: {data['current']}")
+                    st.progress(data['pct'] / 100)
                 with c2:
-                    st.markdown(f"**{pct:.1f}%**")
+                    st.markdown(f"**{data['pct']:.1f}%**")
+                    if data['type'] == 'pace':
+                        st.caption(data['status'])
                     st.caption(f"{days_left} days left")
     else:
         st.info("No active goals.")
