@@ -31,8 +31,9 @@ def main():
         if metric_type == "time_min":
             distance = st.number_input("Distance (mi)", min_value=0.1, step=0.1, value=2.0, key="goal_distance")
             target_value = st.number_input("Time (min)", min_value=0.1, step=0.5, value=18.0, key="goal_value")
-            pace = target_value / distance
-            st.caption(f"**Pace: {pace:.2f} min/mi**")
+            if distance > 0:
+                pace = target_value / distance
+                st.caption(f"**Pace: {pace:.2f} min/mi**")
         elif metric_type == "reps":
             target_value = st.number_input("Reps", min_value=1.0, step=1.0, value=10.0, key="goal_value")
         elif metric_type == "weight_lbs":
@@ -47,7 +48,7 @@ def main():
     def handle_submit():
         st.session_state.goal_submitted = True
     
-    st.button("Add Goal", type="primary", use_container_width=True, on_click=handle_submit, key="add_goal_btn")
+    st.button("Add Goal", type="primary", width='stretch', on_click=handle_submit, key="add_goal_btn") # Fix deprecation warning
 
     # Process submission
     if st.session_state.goal_submitted:
@@ -131,7 +132,7 @@ def main():
                     
                     col_save, col_cancel = st.columns(2)
                     with col_save:
-                        if st.button("💾 Save Changes", key=f"save_{goal_id}", use_container_width=True, type="primary"):
+                        if st.button("💾 Save Changes", key=f"save_{goal_id}", width='stretch', type="primary"): # Fix deprecation warning
                             conn_edit = get_conn()
                             cur_edit = conn_edit.cursor()
                             try:
@@ -150,7 +151,7 @@ def main():
                                 cur_edit.close()
                                 conn_edit.close()
                     with col_cancel:
-                        if st.button("❌ Cancel", key=f"cancel_{goal_id}", use_container_width=True):
+                        if st.button("❌ Cancel", key=f"cancel_{goal_id}", width='stretch'): # Fix deprecation warning
                             st.session_state.editing_goal_id = None
                             st.rerun()
                     
@@ -175,11 +176,11 @@ def main():
                         st.markdown("---")
                         col_edit, col_delete = st.columns(2)
                         with col_edit:
-                            if st.button("✏️ Edit", key=f"edit_{goal_id}", use_container_width=True):
+                            if st.button("✏️ Edit", key=f"edit_{goal_id}", width='stretch'): # Fix deprecation warning
                                 st.session_state.editing_goal_id = goal_id
                                 st.rerun()
                         with col_delete:
-                            if st.button("🗑️ Delete", key=f"delete_{goal_id}", use_container_width=True, type="secondary"):
+                            if st.button("🗑️ Delete", key=f"delete_{goal_id}", width='stretch', type="secondary"): # Fix deprecation warning
                                 conn_del = get_conn()
                                 cur_del = conn_del.cursor()
                                 try:
