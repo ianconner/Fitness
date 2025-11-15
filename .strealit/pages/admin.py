@@ -26,24 +26,27 @@ def main():
                 required=True
             )
         },
-        use_container_width=True,
+        width='stretch', # Fix deprecation warning
         hide_index=True
     )
 
     if st.button("Save Role Changes", type="primary"):
         try:
             with engine.connect() as conn:
-                for idx, row in edited_df.iterrows():
-                    if row["role"] != users_df.iloc[idx]["role"]:
-                        conn.execute(
-                            "UPDATE users SET role = %s WHERE id = %s",
-                            (row["role"], row["id"])
-                        )
-                conn.commit()
-            st.success("Roles updated!")
-            st.rerun()
+                # Start a transaction
+                with conn.begin():
+                    for idx, row in edited_df.iterrows():
+                        original_row = users_df.iloc[idx]
+                        if row["role"] != original_row["role"] or row["username"] != original_row["username"]:
+                            conn.execute(
+                                st.text("UPDATE users SET role = :role, username = :username WHERE id = :id"),
+                                {"role": row["role"], "username": row["username"], "id": row["id"]}
+                            )
+                st.success("Changes saved!")
+                st.rerun()
         except Exception as e:
             st.error(f"Error: {e}")
+
 
     # ——— DATABASE RESET ———
     st.subheader("Danger Zone")
@@ -54,17 +57,47 @@ def main():
             if password == st.secrets.get("ADMIN_NUKE_PASS", "default_nuke_pass"):
                 try:
                     with engine.connect() as conn:
-                        conn.execute("DROP TABLE IF EXISTS workout_exercises, workouts, goals, users CASCADE")
-                        conn.execute("""
-                            CREATE TABLE users (
-                                id SERIAL PRIMARY KEY,
-                                username TEXT UNIQUE NOT NULL,
-                                password TEXT NOT NULL,
-                                role TEXT DEFAULT 'user'
-                            );
-                            INSERT INTO users (username, password, role) VALUES ('ianconner', 'admin123', 'admin');
-                        """)
-                        conn.commit()
+                        with conn.begin(): # Use a transaction
+                            conn.execute(st.text("DROP TABLE IF EXISTS workout_exercises, workouts, goals, users CASCADE"))
+                            conn.execute(st.text("""
+                                CREATE TABLE users (
+                                    id SERIAL PRIMARY KEY,
+                                    username TEXT UNIQUE NOT NULL,
+                                    password TEXT NOT NULL,
+                                    role TEXT DEFAULT 'user',
+                                    created_at TIMESTAMP DEFAULT NOW()
+                                );
+                                CREATE TABLE goals (
+                                    id SERIAL PRIMARY KEY,
+                                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                                    exercise TEXT NOT NULL,
+                                    metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min', 'reps', 'weight_lbs', 'distance_mi')),
+                                    target_value NUMERIC NOT NULL,
+                                    target_date DATE NOT NULL,
+                                    created_at TIMESTAMP DEFAULT NOW()
+                                );
+                                CREATE TABLE workouts (
+                                    id SERIAL PRIMARY KEY,
+                                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                                    workout_date DATE NOT NULL,
+                                    notes TEXT NOT NULL,
+                                    duration_min INTEGER,
+                                    created_at TIMESTAMP DEFAULT NOW()
+                                );
+                                CREATE TABLE workout_exercises (
+                                    id SERIAL PRIMARY KEY,
+                                    workout_id INTEGER REFERENCES workouts(id) ON DELETE CASCADE,
+                                    exercise TEXT NOT NULL,
+                                    sets INTEGER,
+                                    reps INTEGER,
+                                    weight_lbs NUMERIC,
+                                    time_min NUMERIC,
+                                    rest_min NUMERIC,
+                                    distance_mi NUMERIC
+                                );
+                                -- Re-create admin user
+                                INSERT INTO users (username, password, role) VALUES ('ianconner', 'admin123', 'admin');
+                            """))
                     st.success("Database nuked and reset. App will restart.")
                     st.rerun()
                 except Exception as e:
@@ -75,24 +108,31 @@ def main():
     # ——— SYSTEM STATS ———
     st.subheader("System Stats")
     col1, col2, col3 = st.columns(3)
-    with col1:
-        total_users = pd.read_sql("SELECT COUNT(*) FROM users", engine).iloc[0,0]
-        st.metric("Total Users", total_users)
-    with col2:
-        total_workouts = pd.read_sql("SELECT COUNT(*) FROM workouts", engine).iloc[0,0]
-        st.metric("Total Workouts", total_workouts)
-    with col3:
-        total_goals = pd.read_sql("SELECT COUNT(*) FROM goals", engine).iloc[0,0]
-        st.metric("Total Goals", total_goals)
+    try:
+        with col1:
+            total_users = pd.read_sql("SELECT COUNT(*) FROM users", engine).iloc[0,0]
+            st.metric("Total Users", total_users)
+        with col2:
+            total_workouts = pd.read_sql("SELECT COUNT(*) FROM workouts", engine).iloc[0,0]
+            st.metric("Total Workouts", total_workouts)
+        with col3:
+            total_goals = pd.read_sql("SELECT COUNT(*) FROM goals", engine).iloc[0,0]
+            st.metric("Total Goals", total_goals)
+    except Exception as e:
+        st.error(f"Could not load stats: {e}")
+
 
     # ——— RAW DATA VIEW ———
     with st.expander("View Raw Tables"):
         tab1, tab2, tab3, tab4 = st.tabs(["Users", "Workouts", "Exercises", "Goals"])
-        with tab1:
-            st.dataframe(pd.read_sql("SELECT * FROM users", engine), use_container_width=True)
-        with tab2:
-            st.dataframe(pd.read_sql("SELECT * FROM workouts", engine), use_container_width=True)
-        with tab3:
-            st.dataframe(pd.read_sql("SELECT * FROM workout_exercises", engine), use_container_width=True)
-        with tab4:
-            st.dataframe(pd.read_sql("SELECT * FROM goals", engine), use_container_width=True)
+        try:
+            with tab1:
+                st.dataframe(pd.read_sql("SELECT * FROM users ORDER BY id", engine), width='stretch') # Fix deprecation warning
+            with tab2:
+                st.dataframe(pd.read_sql("SELECT * FROM workouts ORDER BY workout_date DESC", engine), width='stretch') # Fix deprecation warning
+            with tab3:
+                st.dataframe(pd.read_sql("SELECT * FROM workout_exercises ORDER BY id DESC", engine), width='stretch') # Fix deprecation warning
+            with tab4:
+                st.dataframe(pd.read_sql("SELECT * FROM goals ORDER BY target_date", engine), width='stretch') # Fix deprecation warning
+        except Exception as e:
+            st.error(f"Could not load tables: {e}")
