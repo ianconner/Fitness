@@ -4,17 +4,108 @@ import requests
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine
+import numpy as np
+import re
 
+# Initialize the SQLAlchemy engine for robust data access
 engine = create_engine(st.secrets["POSTGRES_URL"])
 
-# ------------------------------------------------------------------------------
-# NEW SYSTEM PROMPT FUNCTION (Incorporating your detailed protocol)
-# ------------------------------------------------------------------------------
-def get_system_prompt(data_context, name):
-    # 'name' is assumed to be in st.session_state.username
-    return f"""
+# Define the RISE avatar URL globally
+RISE_AVATAR_URL = "https://api.dicebear.com/7.x/bottts/svg?seed=RISE"
+
+def get_user_data():
+"""Fetches the user's latest 20 workouts and active goals."""
+try:
+# Fetch latest 20 workouts
+workouts = pd.read_sql("""
+           SELECT w.workout_date, w.duration_min, w.notes,
+                  we.exercise, we.sets, we.reps, we.weight_lbs, we.time_min, we.distance_mi
+           FROM workouts w
+           LEFT JOIN workout_exercises we ON w.id = we.workout_id
+           WHERE w.user_id = %s
+           ORDER BY w.workout_date DESC
+           LIMIT 20
+       """, engine, params=(st.session_state.user_id,))
+
+# Fetch active goals
+goals = pd.read_sql("""
+           SELECT exercise, metric_type, target_value, target_date
+           FROM goals
+           WHERE user_id = %s AND target_date >= CURRENT_DATE
+       """, engine, params=(st.session_state.user_id,))
+
+return workouts, goals
+except Exception:
+# Return empty DataFrames on connection or query failure
+return pd.DataFrame(), pd.DataFrame()
+
+def generate_data_context(workouts, goals):
+"""Creates the data summary for the AI to analyze."""
+if workouts.empty and goals.empty:
+return "No training data or active goals have been logged yet."
+
+insight = "CURRENT ATHLETE DATA (Use this for context. Do NOT output this raw text):\n"
+
+if not workouts.empty:
+# Robust data processing for insights
+workouts['workout_date'] = pd.to_datetime(workouts['workout_date']).dt.date
+numeric_cols = ['duration_min', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi']
+for col in numeric_cols:
+workouts[col] = pd.to_numeric(workouts[col], errors='coerce')
+
+total_sessions = len(workouts['workout_date'].unique())
+last_workout_date = workouts['workout_date'].max()
+# Calculate days since last workout using pandas/numpy for robustness
+days_since_workout = (datetime.now().date() - last_workout_date).days if not pd.isna(last_workout_date) else 999
+
+insight += f"• TOTAL SESSIONS: {total_sessions} logged. Days Since Last Session: {days_since_workout}.\n"
+
+# Add details on recent workouts
+recent_run = workouts[workouts['exercise'].astype(str).str.contains('Run|Treadmill', case=False, na=False)].head(1)
+if not recent_run.empty and not pd.isna(recent_run['distance_mi'].iloc[0]) and not pd.isna(recent_run['time_min'].iloc[0]) and recent_run['distance_mi'].iloc[0] > 0:
+pace = recent_run['time_min'].iloc[0] / recent_run['distance_mi'].iloc[0]
+insight += f"• Last Run Metric: {recent_run['distance_mi'].iloc[0]:.2f} mi @ {pace:.2f} min/mi on {recent_run['workout_date'].iloc[0]}.\n"
+
+recent_lift = workouts[workouts['exercise'].astype(str).str.contains('Squat|Deadlift|Bench|Press', case=False, na=False)].head(1)
+if not recent_lift.empty and not pd.isna(recent_lift['weight_lbs'].iloc[0]) and recent_lift['weight_lbs'].iloc[0] > 0:
+insight += f"• Last Max Lift: {recent_lift['exercise'].iloc[0]} @ {recent_lift['weight_lbs'].iloc[0]} lbs.\n"
+
+if not goals.empty:
+insight += f"\nACTIVE GOALS:\n"
+for _, g in goals.iterrows():
+# Ensure target_date is a datetime.date object for calculation
+target_date = pd.to_datetime(g['target_date']).date()
+days_left = (target_date - datetime.now().date()).days
+status = "ON TRACK" if days_left > 7 else "URGENT" if days_left >= 0 else "OVERDUE"
+insight += f"  → {g['exercise']} to hit {g['target_value']} {g['metric_type'].replace('_', ' ')} by {target_date} [{status}]\n"
+
+# Include raw workout data for deep analysis
+insight += "\nRAW WORKOUT DATA (Last 20):\n" + workouts.to_string()
+return insight
+
+def main():
+st.markdown("## RISE Coach")
+st.markdown("**Resilient Integrated Strength Engine — Your AI Performance Partner**")
+
+# --- Two-Button Logic for Control ---
+col1, col2 = st.columns(2)
+with col1:
+        # Re-Sync forces the AI to re-run the full analysis on current data
+if st.button("Re-Sync Metrics", width='stretch'):
+            # This logic triggers a full data fetch and provides an updated intro message
+st.session_state.analysis_done = False 
+st.rerun()
+
+@@ -106,27 +106,78 @@
+st.rerun()
+# --- End Two-Button Logic ---
+
+    # Define the System Prompt and API setup once
+    def get_system_prompt(data_context, name):
+        return f"""
 You are RISE, a highly professional, data-driven performance coach for elite athletes. Your athlete's name is {name}. We are a team focused on optimization.
 
+    # This block runs on initial load or after a "Reset Session"
 **YOUR CONVERSATIONAL PROTOCOL (Crucial):**
 1.  **ALWAYS** provide a comprehensive response that includes a **'full performance review'** and a **'new detailed plan'** based on the 'CURRENT ATHLETE DATA' and their active goals. You must deliver this information in a seamless, conversational flow.
 2.  **NEVER** use a scripted, multi-section format (like numbered sections or fixed headings, e.g., 'Section 1: Performance Review'). Integrate your analysis and plan into a cohesive, encouraging, and direct conversational reply.
@@ -26,137 +117,126 @@ You are RISE, a highly professional, data-driven performance coach for elite ath
 **CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
 {data_context}
 """
-# ------------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # 💥 FIX: This block now performs the initial API call immediately.
+    # -------------------------------------------------------------------------
+if "analysis_done" not in st.session_state:
+with st.spinner("RISE is analyzing your performance metrics..."):
+workouts, goals = get_user_data()
+current_data_context = generate_data_context(workouts, goals)
+            preferred_name = st.session_state.username
+
+if "messages" not in st.session_state:
+st.session_state.messages = []
+
+            # Refined, conversational intro message
+            rise_intro = (
+                f"**RISE online. Welcome back, {st.session_state.username}.** "
+                f"We're a team, so let's check the board! I've synthesized the latest metrics, and here is your initial **performance review** and a **detailed plan** for the immediate training block. "
+                f"Give it a read, and let me know your thoughts—no BS, just optimal performance."
+            )
+
+            st.session_state.messages = [
+                {"role": "assistant", "content": rise_intro}
+            ]
+            
+            # Prepare API Request
+            system_prompt = get_system_prompt(current_data_context, preferred_name)
+            
+            # This user message primes the AI to output the required full review and plan
+            initial_request_to_ai = f"RISE online. Welcome back, {preferred_name}. I've synced the latest metrics. Please provide your initial full performance review and a detailed plan for the immediate training block, based only on the provided data."
+            
+            headers = {
+                "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", 
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "grok-beta", 
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": initial_request_to_ai}
+                ],
+                "temperature": 0.6, 
+                "max_tokens": 1024
+            }
+            
+            try:
+                response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    reply = response.json()["choices"][0]["message"]["content"]
+                else:
+                    reply = f"RISE is experiencing a core systems failure. (Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
+            
+            except Exception as e:
+                if "'GROQ_API_KEY'" in str(e):
+                     reply = "RISE is offline. Error: The GROQ_API_KEY is not configured correctly in your Streamlit secrets."
+                else:
+                     reply = f"RISE offline. An unknown error occurred: {e}"
+
+            # Store the AI's generated response and mark analysis as complete
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+st.session_state.analysis_done = True
+            
+            # Rerun to display the initial message immediately
+            st.rerun() 
+    # -------------------------------------------------------------------------
 
 
-def get_user_data():
-    try:
-        # Fetch up to 20 recent workouts with their exercises
-        workouts = pd.read_sql("""
-            SELECT w.workout_date, w.duration_min, w.notes,
-                   we.exercise, we.sets, we.reps, we.weight_lbs, we.time_min, we.distance_mi
-            FROM workouts w
-            LEFT JOIN workout_exercises we ON w.id = we.workout_id
-            WHERE w.user_id = %s
-            ORDER BY w.workout_date DESC
-            LIMIT 20
-        """, engine, params=(st.session_state.user_id,))
-
-        # Fetch active goals
-        goals = pd.read_sql("""
-            SELECT exercise, metric_type, target_value, target_date
-            FROM goals
-            WHERE user_id = %s AND target_date >= CURRENT_DATE
-        """, engine, params=(st.session_state.user_id,))
-
-        return workouts, goals
-    except:
-        return pd.DataFrame(), pd.DataFrame()
-
-def generate_insight_prompt(workouts, goals):
-    if workouts.empty and goals.empty:
-        return "No data yet. Instruct the user to log a workout to get started."
-
-    insight = "RISE ANALYSIS:\n"
-
-    # Workout Stats
-    if not workouts.empty:
-        total_sessions = len(workouts['workout_date'].unique())
-        total_min = workouts['duration_min'].sum()
-        avg_min_per_session = workouts.groupby('workout_date')['duration_min'].sum().mean()
-        
-        insight += f"Total Sessions Logged: {total_sessions}\n"
-        insight += f"Total Time Logged: {total_min:.0f} minutes\n"
-        insight += f"Average Session Duration: {avg_min_per_session:.1f} minutes\n"
-        
-        # Format workout data for LLM
-        workouts_list = []
-        for date, group in workouts.groupby('workout_date'):
-            workout_summary = f"Date: {date.strftime('%Y-%m-%d')}, Duration: {group['duration_min'].iloc[0]} min, Notes: {group['notes'].iloc[0].strip()}\n"
-            exercises = []
-            for _, row in group.iterrows():
-                ex_details = f"- {row['exercise']}: {row['sets']} sets"
-                if row['reps'] and row['reps'] > 0: ex_details += f", {row['reps']} reps"
-                if row['weight_lbs'] and row['weight_lbs'] > 0: ex_details += f", {row['weight_lbs']} lbs"
-                if row['time_min'] and row['time_min'] > 0: ex_details += f", {row['time_min']} min"
-                if row['distance_mi'] and row['distance_mi'] > 0: ex_details += f", {row['distance_mi']} mi"
-                exercises.append(ex_details)
-            workouts_list.append(workout_summary + "\n".join(exercises))
-        
-        insight += "Recent Workouts (Last 20):\n" + "\n---\n".join(workouts_list) + "\n"
-    
-    # Goals
-    if not goals.empty:
-        goals['target_date'] = pd.to_datetime(goals['target_date']).dt.strftime('%Y-%m-%d')
-        goals_summary = goals.to_string(index=False, header=True)
-        insight += f"\nActive Goals:\n{goals_summary}\n"
-        
-    return insight
-
-def main():
-    if not st.session_state.get("logged_in"):
-        st.error("Please log in to use the AI Coach.")
-        return
-
-    st.markdown("## RISE AI Coach")
-    st.markdown("Your **R**eal-time **I**ntelligent **S**upport & **E**valuation system.")
-
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    # Display chat messages from history on app rerun
-    for message in st.session_state.messages:
-        avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=RISE" if message["role"] == "assistant" else None
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
-
-    # Accept user input
-    prompt = st.chat_input("Ask RISE for advice, analysis, or your next workout...")
-
-    if prompt:
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant", avatar="https://api.dicebear.com/7.x/bottts/svg?seed=RISE"):
-            with st.spinner("RISE is thinking..."):
-                try:
-                    # --- GROQ API SETUP ---
-                    headers = {
-                        "Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", # Correct Key Name
-                        "Content-Type": "application/json"
-                    }
-                    workouts, goals = get_user_data()
-                    context = generate_insight_prompt(workouts, goals)
+# Display the chat history
+for msg in st.session_state.messages:
+@@ -154,49 +205,35 @@
+# Fetch fresh data context for the current query
+workouts, goals = get_user_data()
+current_data_context = generate_data_context(workouts, goals)
                     
-                    # Use the new detailed system prompt function
-                    system_content = get_system_prompt(context, st.session_state.username)
+preferred_name = st.session_state.username
 
-                    payload = {
-                        "model": "llama3-70b-8192", # Correct, supported Groq Model
-                        "messages": [
-                            {"role": "system", "content": system_content},
-                            *st.session_state.messages
-                        ],
-                        "temperature": 0.7,
-                        "max_tokens": 1024 # Increased for comprehensive response
-                    }
-                    
-                    # Correct Groq API Endpoint
-                    response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
-                    
-                    if response.status_code == 200:
-                        reply = response.json()["choices"][0]["message"]["content"]
-                    else:
-                        st.error(f"RISE API Error: {response.status_code} - {response.text}")
-                        reply = "RISE offline due to API connection error. Check your `GROQ_API_KEY` and the model name in your Streamlit secrets."
-                        
-                except Exception as e:
-                    # Catch connection or JSON parsing errors
-                    st.error(f"RISE offline. An exception occurred: {e}")
-                    reply = "RISE offline. Try again."
+                    # --- UPDATED SYSTEM PROMPT ---
+                    system_prompt = f"""
+You are RISE, a highly professional, data-driven performance coach for elite athletes. Your athlete's name is {preferred_name}. We are a team focused on optimization.
 
-                st.markdown(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
+**YOUR CONVERSATIONAL PROTOCOL (Crucial):**
+1.  **ALWAYS** provide a comprehensive response that includes a **'full performance review'** and a **'new detailed plan'** based on the 'CURRENT ATHLETE DATA' and their active goals. You must deliver this information in a seamless, conversational flow.
+2.  **NEVER** use a scripted, multi-section format (like numbered sections or fixed headings, e.g., 'Section 1: Performance Review'). Integrate your analysis and plan into a cohesive, encouraging, and direct conversational reply.
+3.  **TONE:** Highly professional, direct, knowledgeable, focused on data, strategy, and optimization, with a light touch of humor. You are supportive and collaborative—a true partner. **Crucially: Do not be demanding, bossy, or rude.**
+4.  **TERMINOLOGY:** Use elite fitness terms: **athlete**, **load management**, **metrics**, **optimization**, **protocol**, **rate of perceived exertion (RPE)**, and **training cycle**.
+5.  **DATA INTEGRATION:** Seamlessly weave in the provided 'CURRENT ATHLETE DATA' to back up your counsel. Do not mention the raw data block.
+6.  **MEMORY:** Always maintain context from the chat history.
+
+**CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
+{current_data_context}
+"""
+                    # Construct system prompt using the helper function
+                    system_prompt = get_system_prompt(current_data_context, preferred_name)
+
+payload = {
+"model": "grok-beta", 
+"messages": [
+{"role": "system", "content": system_prompt},
+                            # The chat history is sent here
+                            # The chat history (including the new user prompt) is sent here
+*st.session_state.messages 
+],
+"temperature": 0.6, 
+"max_tokens": 1024
+}
+
+response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+
+if response.status_code == 200:
+reply = response.json()["choices"][0]["message"]["content"]
+else:
+reply = f"RISE is experiencing a core systems failure. (Error: {response.status_code} - {response.text}). Please ensure your `GROQ_API_KEY` is valid."
+
+except Exception as e:
+if "'GROQ_API_KEY'" in str(e):
+reply = "RISE is offline. Error: The GROQ_API_KEY is not configured correctly in your Streamlit secrets."
+else:
+reply = f"RISE offline. An unknown error occurred: {e}"
+
+# 4. Display and save assistant response
+st.markdown(reply)
+st.session_state.messages.append({"role": "assistant", "content": reply})
