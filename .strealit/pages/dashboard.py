@@ -8,24 +8,11 @@ import plotly.express as px
 import re
 
 def get_conn():
+    # Use st.secrets for connection details
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-def parse_exercise_name(exercise_str):
-    if not exercise_str or not isinstance(exercise_str, str):
-        return None, None, exercise_str or ""
-    parts = [p.strip() for p in exercise_str.split(":")]
-    name = parts[-1]
-    if " - " in exercise_str:
-        cat_sub = exercise_str.split(" - ", 1)[0]
-        if " - " in cat_sub:
-            cat, sub = cat_sub.split(" - ", 1)
-            return cat, sub, name
-        else:
-            return cat_sub, None, name
-    return None, None, name
-
 # ─────────────────────────────────────────────────────────────────────────────
-# AUTO-DETECT PACE GOAL: "Run 2 miles in 18 min" → 9.0 min/mi
+# AUTO-DETECT PACE GOAL HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 def extract_pace_goal(goal_text):
     """
@@ -74,15 +61,20 @@ def main():
         
         # Convert types
         df_workouts['workout_date'] = pd.to_datetime(df_workouts['workout_date']).dt.date
-        for col in ['duration_min', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi']:
+        for col in ['duration_min', 'sets', 'reps']:
+            # Ensure duration, sets, reps are numeric for metrics
+            df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
+            
+        for col in ['weight_lbs', 'time_min', 'distance_mi']:
+            # The next steps need these as numeric objects
             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         
-        # Calculate pace for all entries
+        # Calculate pace for all entries (use numeric columns)
         df_workouts['pace_min_mi'] = df_workouts.apply(
             lambda row: calculate_pace_min_mi(row['distance_mi'], row['time_min']), axis=1
         )
         
-        # Clean up for display/charts
+        # Clean up for display/charts (convert back to display string)
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
             # Round first, then convert to string and replace NaT/NaN with empty string
             df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['nan', '0.0'], '')
@@ -120,11 +112,12 @@ def main():
             total_workouts = len(df_workouts.drop_duplicates('workout_date'))
             st.metric("Total Workouts", total_workouts)
         with col2:
+            # We must convert to float before summing
             total_duration = df_workouts['duration_min'].astype(float).sum()
             st.metric("Total Time", f"{int(total_duration)} min")
         with col3:
             # Recalculate avg duration from unique workout totals
-            valid_durations = df_workouts.groupby('workout_date')['duration_min'].sum()
+            valid_durations = df_workouts.groupby('workout_date')['duration_min'].astype(float).sum()
             avg_duration = valid_durations.mean() if not valid_durations.empty else 0
             st.metric("Avg Duration", f"{int(avg_duration)} min")
 
@@ -145,9 +138,13 @@ def main():
     if not df_goals.empty:
         st.subheader("Active Goals")
         
-        # Prepare progress data structure
+        # Prepare progress data structure and convert all workout data to numeric for fast calculation
         progress = {}
-        df_workouts_numeric = df_workouts.apply(pd.to_numeric, errors='ignore').fillna(0)
+        # Only include columns that are numeric or can be numeric
+        numeric_cols_for_calc = ['duration_min', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']
+        # The original df_workouts has been cleaned for display, so we re-read the raw (or use the numeric conversion)
+        # Using a fresh numeric frame for calculations
+        df_workouts_numeric = df_workouts.apply(pd.to_numeric, errors='coerce').fillna(0)
         
         for _, row in df_goals.iterrows():
             exercise = row['exercise']
@@ -165,25 +162,16 @@ def main():
                 ]
                 
                 if not matches.empty:
-                    # Best (lowest) pace achieved for this distance
                     current_pace = matches['pace_min_mi'].min()
-                    # Progress: 100% when current_pace reaches goal_pace
-                    # The difference between a high starting pace (worse) and goal_pace (best)
-                    # Use 150% as a cap for display
+                    # Simplified progress: 100% means achieving goal_pace. 0% means 20% slower than goal pace.
                     if current_pace > 0 and goal_pace > 0:
-                        # Find the baseline (worst) pace from all runs logged for this distance.
-                        # This is a complex heuristic, simplifying by using a high number or current_pace if no goal is set.
-                        
-                        # Simplified progress calculation for pace: 
-                        # Assume 100% progress means achieving the goal pace.
-                        # If current_pace > goal_pace, pct is (1 - (current_pace - goal_pace) / goal_pace) * 100
-                        # This can be tricky. Let's use a simpler heuristic for visualization.
-                        # For now, let's assume a baseline that is 20% slower than the target for 0%
                         baseline_pace = goal_pace * 1.2 
                         
                         if current_pace <= goal_pace:
+                             # Exceeding goal is > 100%
                              pct = min(100 + (goal_pace - current_pace) / goal_pace * 100, 150)
                         else:
+                             # Progress relative to baseline
                              pct = max(0, (1 - (current_pace - goal_pace) / (baseline_pace - goal_pace)) * 100)
                     else:
                         pct = 0
@@ -199,13 +187,17 @@ def main():
                 }
 
             # 2. Value Goal Logic (Higher is better)
-            elif metric in df_workouts_numeric.columns:
+            elif metric in numeric_cols_for_calc:
                 matches = df_workouts_numeric[
                     df_workouts_numeric['exercise'].astype(str).str.contains(exercise, case=False, na=False)
                 ]
                 
                 current = pd.to_numeric(matches[metric], errors='coerce').max()
-                pct = min((current / target) * 100, 150) if target > 0 and current > 0 else 0
+                
+                # 💥 FIX 1: Convert Decimal target to float for division
+                target_float = float(target) 
+                
+                pct = min((current / target_float) * 100, 150) if target_float > 0 and current > 0 else 0
                 progress[exercise] = {
                     'type': 'value',
                     'current': current,
@@ -213,11 +205,12 @@ def main():
                     'pct': pct
                 }
 
-        # Display
+        # Display Goals
         for _, row in df_goals.iterrows():
             exercise = row['exercise']
             data = progress.get(exercise, {'type': 'value', 'pct': 0})
-            # Ensure target_date is a datetime-like object
+            
+            # Ensure target_date is a date object for calculation
             target_date = pd.to_datetime(row['target_date']).date() 
             days_left = (target_date - date.today()).days
 
@@ -231,7 +224,7 @@ def main():
                         current_display = f"{data['current']:.1f}" if pd.notna(data['current']) and data['current'] else 'No Data'
                         st.caption(f"Goal: {data['target']} {row['metric_type'].replace('_', ' ')} | Current: {current_display}")
                     
-                    # 💥 FIX APPLIED HERE: Cap the progress bar value at 1.0 (100%)
+                    # 💥 FIX 2: Cap the progress bar value at 1.0 (100%) to prevent Streamlit error
                     st.progress(min(data['pct'] / 100, 1.0)) 
 
                 with c2:
