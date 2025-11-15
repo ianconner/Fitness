@@ -21,17 +21,13 @@ def main():
         for i, ex in enumerate(exercises):
             st.markdown(f"**Exercise {i+1}**")
             
-            # Category Selection (persists via key; changes visible after preview/rerun)
+            # Category Selection (use session_state for persistence; changes batched until form interaction)
             category_key = f"cat_{i}"
             if category_key not in st.session_state:
                 st.session_state[category_key] = ex["category"] or ""
             
             selected_category = st.selectbox("Category", ["", "Cardio", "Weights"], index=0 if not st.session_state[category_key] else ["Cardio", "Weights"].index(st.session_state[category_key]), key=category_key)
             ex["category"] = selected_category
-            
-            # Preview Button for Reactivity (triggers rerun to show/hide inputs)
-            if st.button(f"Preview Exercise {i+1}", key=f"preview_{i}"):
-                st.rerun()
             
             # Sub-Category (only if category selected)
             sub_category_key = f"sub_{i}"
@@ -40,20 +36,20 @@ def main():
                 if ex["category"] == "Cardio":
                     sub_options = ["Running", "Walking", "Elliptical", "Other"]
                     if sub_category_key not in st.session_state:
-                        st.session_state[sub_category_key] = "Running"  # Default
+                        st.session_state[sub_category_key] = sub_options[0]
                     selected_sub = st.selectbox("Sub-Category", sub_options, index=sub_options.index(st.session_state[sub_category_key]), key=sub_category_key)
                     st.session_state[sub_category_key] = selected_sub
                     sub_category = selected_sub
                 elif ex["category"] == "Weights":
                     sub_options = ["Free-Weights", "Machine", "Body-Weights"]
                     if sub_category_key not in st.session_state:
-                        st.session_state[sub_category_key] = "Free-Weights"  # Default
+                        st.session_state[sub_category_key] = sub_options[0]
                     selected_sub = st.selectbox("Sub-Category", sub_options, index=sub_options.index(st.session_state[sub_category_key]), key=sub_category_key)
                     st.session_state[sub_category_key] = selected_sub
                     sub_category = selected_sub
                 ex["sub_category"] = sub_category
             
-            # Conditional Inputs Based on Category (updates on preview/rerun)
+            # Conditional Inputs Based on Category (visible after category selection; full update on form submit/add/remove)
             if ex["category"] == "Cardio":
                 col_time, col_dist = st.columns(2)
                 with col_time:
@@ -89,7 +85,7 @@ def main():
                 ex["pace_min_mi"] = 0.0
                 
             else:
-                st.warning("Select a category and click 'Preview' to enable inputs.")
+                st.info("Select a category above to reveal inputs.")
                 # Reset all fields
                 ex["sets"] = 3
                 ex["reps"] = 10
@@ -113,7 +109,7 @@ def main():
             
             st.divider()
 
-        # Add/Remove Controls
+        # Add/Remove Controls (these trigger rerun for reactivity)
         col_add, col_remove = st.columns(2)
         with col_add:
             if st.form_submit_button("Add Exercise"):
@@ -136,30 +132,4 @@ def main():
                 try:
                     # Insert workout (session-level, empty overall notes)
                     cur.execute(
-                        "INSERT INTO workouts (user_id, workout_date, notes, duration_min) VALUES (%s, %s, %s, %s) RETURNING id",
-                        (st.session_state.user_id, workout_date, "", duration_min)
-                    )
-                    workout_id = cur.fetchone()[0]
-
-                    # Insert individual exercises with per-ex notes
-                    for ex in exercises:
-                        if ex["exercise"].strip() and ex["category"]:
-                            cur.execute(
-                                "INSERT INTO workout_exercises (workout_id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                                (workout_id, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"])
-                            )
-                    conn.commit()
-                    st.success("Workout session saved! Exercises logged for dashboard & RISE analysis.")
-                    # Clear session state keys for next use
-                    for j in range(len(exercises)):
-                        st.session_state.pop(f"cat_{j}", None)
-                        st.session_state.pop(f"sub_{j}", None)
-                        st.session_state.pop(f"base_name_{j}", None)
-                        st.session_state.pop(f"notes_{j}", None)
-                    st.session_state.pop("exercises", None)
-                    st.rerun()
-                except Exception as e:
-                    conn.rollback()
-                    st.error(f"Error: {e}")
-                finally:
-                    conn.close()
+                        "INSERT INTO workouts (user_id, workout_date, notes)
