@@ -69,4 +69,24 @@ def main():
                 col_time, col_dist = st.columns(2)
                 with col_time:
                     time_key = f"time_{i}"
-                    ex["time_min"] = st.number_input("Time (min)", min_value=0.0,
+                    ex["time_min"] = st.number_input("Time (min)", min_value=0.0, value=ex["time_min"], key=time_key, step=0.5)
+                with col_dist:
+                    dist_key = f"dist_{i}"
+                    ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=dist_key, step=0.1)
+                
+                # Auto-compute Pace
+                if ex["distance_mi"] > 0:
+                    ex["pace_min_mi"] = ex["time_min"] / ex["distance_mi"]
+                    st.caption(f"**Pace: {ex['pace_min_mi']:.2f} min/mi** (auto-computed)")
+                else:
+                    ex["pace_min_mi"] = 0.0
+                    st.caption("**Pace: -** (Enter distance to compute)")
+                
+                # Reset weights/sets
+                ex["sets"] = 1
+                ex["weight_lbs"] = 0.0
+                
+            elif ex["category"] == "Weights":
+                # Sets
+                sets_key = f"sets_{i}"
+                ex["sets"] = st.number_input("Sets
