@@ -102,13 +102,13 @@ def main():
     # --- Two-Button Logic for Control ---
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔄 Re-Sync Metrics", use_container_width=True):
+        if st.button("🔄 Re-Sync Metrics", width='stretch'):
             st.session_state.analysis_done = False
             st.session_state.messages = []
             st.rerun()
 
     with col2:
-        if st.button("🗑️ Reset Session", use_container_width=True):
+        if st.button("🗑️ Reset Session", width='stretch'):
             st.session_state.analysis_done = False
             st.session_state.messages = []
             st.rerun()
