@@ -363,16 +363,21 @@ def main():
                 
                 # Goal type checkboxes
                 st.markdown("**Goal Metrics** (select one or more):")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    track_weight = st.checkbox("Weight", value=True)
-                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0) if track_weight else None
-                with col2:
-                    track_reps = st.checkbox("Reps")
-                    target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10) if track_reps else None
-                with col3:
-                    track_sets = st.checkbox("Sets")
-                    target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3) if track_sets else None
+                
+                track_weight = st.checkbox("Weight", value=True)
+                target_weight = None
+                if track_weight:
+                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0, key="weight_target")
+                
+                track_reps = st.checkbox("Reps")
+                target_reps = None
+                if track_reps:
+                    target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10, key="reps_target")
+                
+                track_sets = st.checkbox("Sets")
+                target_sets = None
+                if track_sets:
+                    target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3, key="sets_target")
                 
                 # Target date
                 target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
