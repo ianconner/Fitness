@@ -5,16 +5,16 @@ import psycopg2
 import pandas as pd
 import time
 import re
-import numpy as np # Import numpy for robust array handling
+import numpy as np
 
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# Auto-detect helpers (same as dashboard)
+# Auto-detect helpers
 def extract_pace_goal(goal_text):
     text = goal_text.lower()
-    dist_match = re.search(r'(\d*\\.?\\d+)\\s*(mile|mi)', text)
-    time_match = re.search(r'(\\d+)\\s*(min|minute|mins)', text)
+    dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', text)
+    time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)
     distance = float(dist_match.group(1)) if dist_match else None
     total_time = float(time_match.group(1)) if time_match else None
     if distance and total_time and distance > 0:
@@ -36,9 +36,7 @@ def main():
         st.session_state.editing_goal_id = None
     
     # ───── EDIT GOAL FORM ─────
-    # (Assuming the Edit Form logic exists here, using st.session_state.editing_goal_id)
     if st.session_state.editing_goal_id is not None:
-        # Load the goal data being edited
         cur.execute("SELECT id, exercise, metric_type, target_value, target_date FROM goals WHERE id = %s AND user_id = %s", (st.session_state.editing_goal_id, st.session_state.user_id))
         goal_data = cur.fetchone()
         
@@ -74,7 +72,7 @@ def main():
                     if st.button("Cancel"):
                         st.session_state.editing_goal_id = None
                         st.rerun()
-            return # Exit main() to prevent other forms from loading while editing
+            return
 
     try:
         # Load all goals
@@ -110,7 +108,7 @@ def main():
             df_workouts['pace_min_mi'] = np.where(df_workouts['distance_mi'] > 0, df_workouts['time_min'] / df_workouts['distance_mi'], np.nan)
             df_workouts['pace_min_mi'] = pd.to_numeric(df_workouts['pace_min_mi'], errors='coerce')
 
-        # === GOAL PROGRESS CALCULATION (Synchronized with Dashboard) ===
+        # === GOAL PROGRESS CALCULATION ===
         progress = {}
         if not df_goals.empty and not df_workouts.empty:
             for _, goal in df_goals.iterrows():
@@ -130,7 +128,8 @@ def main():
                     best_pace = matches['pace_min_mi'].min()
                     
                     if not pd.isna(best_pace) and target_pace > 0:
-                        pct = min((target_pace / best_pace) * 100, 150)
+                        # Cap at 100% for progress bar
+                        pct = min((target_pace / best_pace) * 100, 100)
                     else:
                         best_pace = None
                         pct = 0
@@ -147,14 +146,16 @@ def main():
                     if metric in ['weight_lbs', 'reps', 'distance_mi']:
                         current = pd.to_numeric(matches[metric], errors='coerce').max()
                         if not pd.isna(current) and target > 0:
-                            pct = min((current / target) * 100, 150)
+                            # Cap at 100% for progress bar
+                            pct = min((current / target) * 100, 100)
                         else:
                             current = 0
                             pct = 0
                     else: # metric is 'time_min' (lower is better)
                         current = pd.to_numeric(matches[metric], errors='coerce').min()
                         if not pd.isna(current) and current > 0 and target > 0:
-                            pct = min((target / current) * 100, 150)
+                            # Cap at 100% for progress bar
+                            pct = min((target / current) * 100, 100)
                         else:
                             current = None
                             pct = 0
@@ -174,7 +175,6 @@ def main():
                 data = progress.get(exercise, {'type': 'value', 'pct': 0, 'current': 0, 'target': row['target_value']})
                 
                 with st.container(border=True):
-                    # Columns for progress and buttons (FIX for Issue 1)
                     col_display, col_buttons = st.columns([5, 1])
 
                     with col_display:
@@ -192,16 +192,15 @@ def main():
                             current_text = f"Current: {data['current']}" if data['current'] else "No data"
                             st.caption(f"Goal: {data['target']} {metric_unit} | {current_text} | Due: {row['target_date'].strftime('%b %d, %Y')} | Status: {status}")
 
-                        st.progress(data['pct'] / 100)
+                        # Progress bar capped at 100% (1.0)
+                        st.progress(min(data['pct'] / 100, 1.0))
 
                     with col_buttons:
-                        # Edit Button
-                        if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal", use_container_width=True):
+                        if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal", width='stretch'):
                             st.session_state.editing_goal_id = goal_id
                             st.rerun()
 
-                        # Delete Button
-                        if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal", use_container_width=True):
+                        if st.button("🗑️", key=f"delete_{goal_id}", help="Delete goal", width='stretch'):
                             conn_del = get_conn()
                             cur_del = conn_del.cursor()
                             try:
@@ -217,12 +216,11 @@ def main():
         else:
             st.info("No active goals yet. Add one below!")
             
-        st.markdown("---") # Separator before the Add Goal form
+        st.markdown("---")
 
     except Exception as e:
         st.error(f"Error loading goals: {e}")
     finally:
-        # Close connection only if not inside an editing block that needs it open
         if st.session_state.editing_goal_id is None:
             cur.close()
             conn.close()
