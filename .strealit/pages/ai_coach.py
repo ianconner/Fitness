@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine
+import re
 
 # Initialize the SQLAlchemy engine for robust data access
 engine = create_engine(st.secrets["POSTGRES_URL"])
@@ -45,7 +46,7 @@ def generate_data_context(workouts, goals):
     insight = "CURRENT ATHLETE DATA (Use this for context. Do NOT output this raw text):\n"
 
     if not workouts.empty:
-        # Robust data processing for insights
+        # Robust data processing
         workouts['workout_date'] = pd.to_datetime(workouts['workout_date']).dt.date
         numeric_cols = ['duration_min', 'sets', 'reps', 'weight_lbs', 'time_min', 'distance_mi']
         for col in numeric_cols:
@@ -57,26 +58,68 @@ def generate_data_context(workouts, goals):
 
         insight += f"• TOTAL SESSIONS: {total_sessions} logged. Days Since Last Session: {days_since_workout}.\n"
 
-        # Add details on recent workouts
-        recent_run = workouts[workouts['exercise'].astype(str).str.contains('Run|Treadmill', case=False, na=False)].head(1)
-        if not recent_run.empty and not pd.isna(recent_run['distance_mi'].iloc[0]) and not pd.isna(recent_run['time_min'].iloc[0]) and recent_run['distance_mi'].iloc[0] > 0:
-            pace = recent_run['time_min'].iloc[0] / recent_run['distance_mi'].iloc[0]
-            insight += f"• Last Run Metric: {recent_run['distance_mi'].iloc[0]:.2f} mi @ {pace:.2f} min/mi on {recent_run['workout_date'].iloc[0]}.\n"
+        # Cardio analysis with pace
+        cardio = workouts[workouts['exercise'].astype(str).str.contains('Run|Walk|Cardio|Elliptical|Bike|Cycling', case=False, na=False)]
+        if not cardio.empty and cardio['distance_mi'].notna().any():
+            # Calculate pace for cardio workouts
+            cardio['pace_min_mi'] = cardio['time_min'] / cardio['distance_mi']
+            
+            recent_cardio = cardio.head(3)
+            insight += f"\n• RECENT CARDIO PERFORMANCE:\n"
+            for _, run in recent_cardio.iterrows():
+                if not pd.isna(run['distance_mi']) and not pd.isna(run['pace_min_mi']) and run['distance_mi'] > 0:
+                    insight += f"  → {run['workout_date']}: {run['distance_mi']:.1f} mi in {run['time_min']:.0f} min ({run['pace_min_mi']:.2f} min/mi pace)\n"
 
-        recent_lift = workouts[workouts['exercise'].astype(str).str.contains('Squat|Deadlift|Bench|Press', case=False, na=False)].head(1)
-        if not recent_lift.empty and not pd.isna(recent_lift['weight_lbs'].iloc[0]) and recent_lift['weight_lbs'].iloc[0] > 0:
-            insight += f"• Last Max Lift: {recent_lift['exercise'].iloc[0]} @ {recent_lift['weight_lbs'].iloc[0]} lbs.\n"
+        # Lifting analysis
+        lifting = workouts[workouts['exercise'].astype(str).str.contains('Squat|Deadlift|Bench|Press|Curl|Row', case=False, na=False)]
+        if not lifting.empty:
+            recent_lift = lifting.head(1).iloc[0]
+            if not pd.isna(recent_lift['weight_lbs']) and recent_lift['weight_lbs'] > 0:
+                insight += f"\n• RECENT STRENGTH WORK: {recent_lift['exercise']} @ {recent_lift['weight_lbs']:.0f} lbs x {recent_lift['sets']:.0f}x{recent_lift['reps']:.0f}\n"
 
     if not goals.empty:
-        insight += f"\nACTIVE GOALS:\n"
+        insight += f"\n\nACTIVE GOALS (PRIMARY FOCUS - Use pace as the key metric for cardio goals):\n"
         for _, g in goals.iterrows():
             target_date = pd.to_datetime(g['target_date']).date()
             days_left = (target_date - datetime.now().date()).days
             status = "ON TRACK" if days_left > 7 else "URGENT" if days_left >= 0 else "OVERDUE"
-            insight += f"  → {g['exercise']} to hit {g['target_value']} {g['metric_type'].replace('_', ' ')} by {target_date} [{status}]\n"
+            
+            # Parse pace goals
+            goal_text = g['exercise'].lower()
+            dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', goal_text)
+            time_match = re.search(r'(\d+)\s*(min|minute|mins)', goal_text)
+            
+            if dist_match and time_match and g['metric_type'] == 'time_min':
+                distance = float(dist_match.group(1))
+                time_target = float(time_match.group(1))
+                target_pace = time_target / distance
+                
+                # Calculate current performance
+                if not workouts.empty:
+                    cardio = workouts[workouts['exercise'].astype(str).str.contains('Run|Walk|Cardio', case=False, na=False)]
+                    if not cardio.empty and cardio['distance_mi'].notna().any():
+                        cardio['pace_min_mi'] = cardio['time_min'] / cardio['distance_mi']
+                        best_pace = cardio['pace_min_mi'].min()
+                        longest_distance = cardio['distance_mi'].max()
+                        
+                        pace_gap = best_pace - target_pace if not pd.isna(best_pace) else 999
+                        distance_gap = distance - longest_distance if not pd.isna(longest_distance) else distance
+                        
+                        insight += f"  → GOAL: {g['exercise']} by {target_date} [{status}]\n"
+                        insight += f"    TARGET: {distance:.1f} mi in {time_target:.0f} min = {target_pace:.2f} min/mi pace\n"
+                        insight += f"    CURRENT BEST PACE: {best_pace:.2f} min/mi (gap: {pace_gap:+.2f} min/mi)\n"
+                        insight += f"    LONGEST DISTANCE: {longest_distance:.1f} mi (gap: {distance_gap:+.1f} mi)\n"
+                        insight += f"    FOCUS: {'Improve pace by {:.2f} min/mi AND build endurance for {:.1f} more miles'.format(abs(pace_gap), abs(distance_gap)) if pace_gap > 0 or distance_gap > 0 else 'GOAL ACHIEVED - maintain or set new goal'}\n"
+                    else:
+                        insight += f"  → GOAL: {g['exercise']} by {target_date} [{status}]\n"
+                        insight += f"    TARGET: {distance:.1f} mi @ {target_pace:.2f} min/mi pace\n"
+                        insight += f"    STATUS: No cardio data yet - need baseline assessment\n"
+            else:
+                # Standard goal
+                insight += f"  → {g['exercise']} to hit {g['target_value']} {g['metric_type'].replace('_', ' ')} by {target_date} [{status}]\n"
 
-    # Include raw workout data for deep analysis
-    insight += "\nRAW WORKOUT DATA (Last 20):\n" + workouts.to_string()
+    # Include raw workout data
+    insight += "\n\nRAW WORKOUT DATA (Last 20 sessions):\n" + workouts.to_string()
     return insight
 
 def get_system_prompt(data_context, name):
@@ -89,7 +132,17 @@ def get_system_prompt(data_context, name):
 3. **TONE:** Highly professional, direct, knowledgeable, focused on data, strategy, and optimization, with a light touch of humor. You are supportive and collaborative—a true partner. **Crucially: Do not be demanding, bossy, or rude.**
 4. **TERMINOLOGY:** Use elite fitness terms: **athlete**, **load management**, **metrics**, **optimization**, **protocol**, **rate of perceived exertion (RPE)**, and **training cycle**.
 5. **DATA INTEGRATION:** Seamlessly weave in the provided 'CURRENT ATHLETE DATA' to back up your counsel. Do not mention the raw data block.
-6. **MEMORY:** Always maintain context from the chat history.
+6. **MEMORY:** Always maintain context from the chat history. Remember your previous recommendations and refer to them naturally.
+
+**PACE AS PRIMARY CARDIO METRIC (Critical):**
+- For cardio goals, PACE (min/mi) is the PRIMARY performance indicator, not raw time or distance alone.
+- Understand that hitting a 9 min/mi pace on a 0.5-mile run shows speed capability, but the athlete still needs to build ENDURANCE to sustain it over 2 miles.
+- When giving feedback:
+  - If pace is met but distance isn't: Focus on endurance building (longer runs at easier pace, tempo runs, long slow distance)
+  - If distance is met but pace isn't: Focus on speed work (intervals, fartleks, tempo runs at goal pace)
+  - If both are improving: Recognize progress and adjust training stimulus
+- Shorter interval workouts at goal pace or better are VALUABLE training - don't discount them because distance wasn't met. They build speed that will transfer to longer distances.
+- Example good feedback: "Your 5-minute intervals at 8.5 min/mi show you CAN hit the pace. Now we need to extend that endurance so you can hold it for the full 2 miles."
 
 **CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
 {data_context}
