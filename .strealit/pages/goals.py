@@ -366,13 +366,13 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     track_weight = st.checkbox("Weight", value=True)
-                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0, disabled=not track_weight) if track_weight else None
+                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0) if track_weight else None
                 with col2:
                     track_reps = st.checkbox("Reps")
-                    target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10, disabled=not track_reps) if track_reps else None
+                    target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10) if track_reps else None
                 with col3:
                     track_sets = st.checkbox("Sets")
-                    target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3, disabled=not track_sets) if track_sets else None
+                    target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3) if track_sets else None
                 
                 # Target date
                 target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
