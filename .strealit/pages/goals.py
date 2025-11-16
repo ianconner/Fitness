@@ -33,6 +33,18 @@ def main():
     if 'editing_goal_id' not in st.session_state:
         st.session_state.editing_goal_id = None
     
+    # Fetch past exercises for autocomplete
+    try:
+        cur.execute("""
+            SELECT DISTINCT we.exercise
+            FROM workout_exercises we
+            JOIN workouts w ON we.workout_id = w.id
+            WHERE w.user_id = %s AND we.exercise IS NOT NULL
+        """, (st.session_state.user_id,))
+        past_exercises = [row[0] for row in cur.fetchall()]
+    except:
+        past_exercises = []
+
     # ───── EDIT GOAL FORM ─────
     if st.session_state.editing_goal_id is not None:
         cur.execute("SELECT id, exercise, metric_type, target_value, target_date FROM goals WHERE id = %s AND user_id = %s", 
@@ -44,9 +56,9 @@ def main():
             
             st.subheader(f"✏️ Edit Goal")
             with st.form(f"edit_goal_{edit_id}"):
-                new_exercise = st.text_input("Goal (e.g., 'Run 2 miles in 18 min')", value=edit_exercise)
+                new_exercise = st.text_input("Goal", value=edit_exercise)
                 new_metric_type = st.selectbox("Metric", ["time_min", "distance_mi", "weight_lbs", "reps"], 
-                                              index=["time_min", "distance_mi", "weight_lbs", "reps"].index(edit_metric))
+                                              index=["time_min", "distance_mi", "weight_lbs", "reps"].index(edit_metric) if edit_metric in ["time_min", "distance_mi", "weight_lbs", "reps"] else 0)
                 new_target_value = st.number_input("Target Value", min_value=0.1, step=0.1, value=float(edit_value))
                 new_target_date = st.date_input("Target Date", value=edit_date)
 
@@ -104,7 +116,7 @@ def main():
             for col in numeric_cols:
                 df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
             
-            # Calculate pace: ((time + rest) * reps) / distance
+            # Calculate pace
             df_workouts['total_effort'] = (df_workouts['time_min'] + df_workouts['rest_min']) * df_workouts['reps']
             df_workouts['pace_min_mi'] = np.where(
                 df_workouts['distance_mi'] > 0,
@@ -135,18 +147,13 @@ def main():
                     ].copy()
                     
                     if not cardio_workouts.empty:
-                        # Best pace achieved (any distance)
                         best_pace = cardio_workouts['pace_min_mi'].min()
                         best_pace_workout = cardio_workouts[cardio_workouts['pace_min_mi'] == best_pace].iloc[0]
-                        
-                        # Longest distance achieved
                         best_distance = cardio_workouts['distance_mi'].max()
                         
-                        # Star counts
                         pace_stars = len(cardio_workouts[cardio_workouts['pace_min_mi'] <= goal_pace])
                         distance_stars = len(cardio_workouts[cardio_workouts['distance_mi'] >= goal_distance])
                         
-                        # Progress percentages (capped at 100 for display)
                         pace_pct = min((goal_pace / best_pace) * 100, 100) if not pd.isna(best_pace) and best_pace > 0 else 0
                         distance_pct = min((best_distance / goal_distance) * 100, 100) if not pd.isna(best_distance) and goal_distance > 0 else 0
                         
@@ -175,7 +182,7 @@ def main():
                             'distance_stars': 0
                         }
                 
-                elif metric in ['weight_lbs', 'reps', 'distance_mi']:
+                elif metric in ['weight_lbs', 'reps', 'distance_mi', 'sets']:
                     matches = df_workouts[df_workouts['exercise'].str.contains(goal_text, case=False, na=False)]
                     current = pd.to_numeric(matches[metric], errors='coerce').max() if not matches.empty else 0
                     pct = min((current / target) * 100, 100) if target > 0 and not pd.isna(current) else 0
@@ -196,7 +203,7 @@ def main():
             for _, row in df_active.iterrows():
                 goal_id = row['id']
                 exercise = row['exercise']
-                data = progress.get(exercise, {'type': 'value', 'pct': 0})
+                data = progress.get(exercise, {'type': 'value', 'pct': 0, 'current': 0, 'target': row['target_value']})
                 
                 with st.container(border=True):
                     col_display, col_buttons = st.columns([5, 1])
@@ -208,38 +215,44 @@ def main():
                         status = "On Track" if days_left > 7 else "Urgent" if days_left >= 0 else "Overdue"
                         
                         if data['type'] == 'pace':
-                            st.caption(f"Goal: {data['goal_distance']:.1f} mi in {data['goal_time']:.0f} min ({data['goal_pace']:.2f} min/mi pace)")
+                            st.caption(f"Goal: {data.get('goal_distance', 0):.1f} mi in {data.get('goal_time', 0):.0f} min ({data.get('goal_pace', 0):.2f} min/mi pace)")
                             
                             if data.get('best_pace'):
-                                st.caption(f"Best: {data['best_distance']:.1f} mi in {data['best_time']:.0f} min ({data['best_pace']:.2f} min/mi pace)")
+                                st.caption(f"Best: {data.get('best_distance', 0):.1f} mi in {data.get('best_time', 0):.0f} min ({data['best_pace']:.2f} min/mi pace)")
                             else:
                                 st.caption("Best: No data yet")
                             
                             st.caption(f"Due: {row['target_date'].strftime('%b %d, %Y')} | Status: {status}")
                             
                             # Pace progress bar
-                            pace_label = f"Pace: {data['pace_pct']:.0f}%"
-                            if data['pace_stars'] > 0:
-                                pace_label += f" {'⭐' * min(data['pace_stars'], 5)}"
-                                if data['pace_stars'] > 5:
-                                    pace_label += f" x{data['pace_stars']}"
+                            pace_pct = data.get('pace_pct', 0)
+                            pace_stars = data.get('pace_stars', 0)
+                            pace_label = f"Pace: {pace_pct:.0f}%"
+                            if pace_stars > 0:
+                                pace_label += f" {'⭐' * min(pace_stars, 5)}"
+                                if pace_stars > 5:
+                                    pace_label += f" x{pace_stars}"
                             st.caption(pace_label)
-                            st.progress(data['pace_pct'] / 100)
+                            st.progress(pace_pct / 100)
                             
                             # Distance progress bar
-                            dist_label = f"Distance: {data['distance_pct']:.0f}%"
-                            if data['distance_stars'] > 0:
-                                dist_label += f" {'⭐' * min(data['distance_stars'], 5)}"
-                                if data['distance_stars'] > 5:
-                                    dist_label += f" x{data['distance_stars']}"
+                            dist_pct = data.get('distance_pct', 0)
+                            dist_stars = data.get('distance_stars', 0)
+                            dist_label = f"Distance: {dist_pct:.0f}%"
+                            if dist_stars > 0:
+                                dist_label += f" {'⭐' * min(dist_stars, 5)}"
+                                if dist_stars > 5:
+                                    dist_label += f" x{dist_stars}"
                             st.caption(dist_label)
-                            st.progress(data['distance_pct'] / 100)
+                            st.progress(dist_pct / 100)
                         else:
                             metric_unit = row['metric_type'].replace('_', ' ')
-                            current_text = f"Current: {data['current']:.1f}" if data.get('current') else "No data"
-                            st.caption(f"Goal: {data['target']:.1f} {metric_unit} | {current_text}")
+                            current_val = data.get('current', 0)
+                            target_val = data.get('target', row['target_value'])
+                            current_text = f"Current: {current_val:.1f}" if current_val else "No data"
+                            st.caption(f"Goal: {target_val:.1f} {metric_unit} | {current_text}")
                             st.caption(f"Due: {row['target_date'].strftime('%b %d, %Y')} | Status: {status}")
-                            st.progress(data['pct'] / 100)
+                            st.progress(data.get('pct', 0) / 100)
 
                     with col_buttons:
                         if st.button("✏️", key=f"edit_{goal_id}", help="Edit goal", width='stretch'):
@@ -271,32 +284,172 @@ def main():
             cur.close()
             conn.close()
 
-    # ───── ADD GOAL FORM ─────
+    # ───── ADD GOAL FORM (Interactive like Log Workout) ─────
     st.subheader("Add New Goal")
-    with st.form("add_goal"):
-        goal_exercise = st.text_input("Goal (e.g., 'Run 2 miles in 18 min')")
-        metric_type = st.selectbox("Metric", ["time_min", "distance_mi", "weight_lbs", "reps"])
-        target_value = st.number_input("Target Value", min_value=0.1, step=0.1)
-        target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
-        submitted = st.form_submit_button("Add Goal", type="primary")
+    
+    # Initialize session state for goal form
+    if 'new_goal_category' not in st.session_state:
+        st.session_state.new_goal_category = None
+    
+    # Category selection (outside form for reactivity)
+    category = st.selectbox(
+        "Category",
+        ["", "Cardio", "Weights", "Free-Text"],
+        key="goal_category_select"
+    )
+    st.session_state.new_goal_category = category
 
-        if submitted:
-            if not goal_exercise:
-                st.error("Please describe your goal.")
-            else:
-                conn_add = get_conn()
-                cur_add = conn_add.cursor()
-                try:
-                    cur_add.execute(
-                        "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
-                        (st.session_state.user_id, goal_exercise, metric_type, target_value, target_date)
-                    )
-                    conn_add.commit()
-                    st.success("Goal added!")
-                    st.rerun()
-                except Exception as e:
-                    conn_add.rollback()
-                    st.error(f"Error adding goal: {e}")
-                finally:
-                    cur_add.close()
-                    conn_add.close()
+    if category:
+        with st.form("add_goal"):
+            if category == "Cardio":
+                # Sub-category
+                sub_category = st.selectbox("Type", ["Running", "Walking", "Elliptical", "Other"])
+                
+                # Exercise name with autocomplete
+                cardio_exercises = [ex for ex in past_exercises if any(kw in ex.lower() for kw in ['run', 'walk', 'cardio', 'elliptical', 'bike', 'cycle'])]
+                selected_ex = st.selectbox("Exercise (select or type new)", [""] + cardio_exercises, key="cardio_ex_select")
+                exercise_name = st.text_input("or type new name", value=selected_ex, key="cardio_ex_input")
+                
+                # Distance and Time
+                col1, col2 = st.columns(2)
+                with col1:
+                    distance = st.number_input("Distance (miles)", min_value=0.1, step=0.1, value=2.0)
+                with col2:
+                    time_target = st.number_input("Target Time (minutes)", min_value=1, step=1, value=18)
+                
+                # Calculate and display pace
+                target_pace = time_target / distance if distance > 0 else 0
+                st.info(f"**Target Pace: {target_pace:.2f} min/mi**")
+                
+                # Target date
+                target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
+                
+                submitted = st.form_submit_button("Add Goal", type="primary")
+                
+                if submitted:
+                    if not exercise_name:
+                        st.error("Please enter an exercise name.")
+                    else:
+                        # Format goal text
+                        full_name = f"Cardio - {sub_category}: {exercise_name}" if exercise_name else f"Cardio - {sub_category}"
+                        goal_text = f"{full_name} - {distance} miles in {time_target} min"
+                        
+                        conn_add = get_conn()
+                        cur_add = conn_add.cursor()
+                        try:
+                            cur_add.execute(
+                                "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                                (st.session_state.user_id, goal_text, 'time_min', time_target, target_date)
+                            )
+                            conn_add.commit()
+                            st.success("Cardio goal added!")
+                            st.session_state.new_goal_category = None
+                            st.rerun()
+                        except Exception as e:
+                            conn_add.rollback()
+                            st.error(f"Error: {e}")
+                        finally:
+                            cur_add.close()
+                            conn_add.close()
+            
+            elif category == "Weights":
+                # Sub-category
+                sub_category = st.selectbox("Type", ["Free-Weights", "Machine", "Body-Weights"])
+                
+                # Exercise name with autocomplete
+                weight_exercises = [ex for ex in past_exercises if any(kw in ex.lower() for kw in ['squat', 'press', 'bench', 'deadlift', 'curl', 'row', 'weight'])]
+                selected_ex = st.selectbox("Exercise (select or type new)", [""] + weight_exercises, key="weight_ex_select")
+                exercise_name = st.text_input("or type new name", value=selected_ex, key="weight_ex_input")
+                
+                # Goal type checkboxes
+                st.markdown("**Goal Metrics** (select one or more):")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    track_weight = st.checkbox("Weight", value=True)
+                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0, disabled=not track_weight) if track_weight else None
+                with col2:
+                    track_reps = st.checkbox("Reps")
+                    target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10, disabled=not track_reps) if track_reps else None
+                with col3:
+                    track_sets = st.checkbox("Sets")
+                    target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3, disabled=not track_sets) if track_sets else None
+                
+                # Target date
+                target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
+                
+                submitted = st.form_submit_button("Add Goal", type="primary")
+                
+                if submitted:
+                    if not exercise_name:
+                        st.error("Please enter an exercise name.")
+                    elif not (track_weight or track_reps or track_sets):
+                        st.error("Please select at least one goal metric.")
+                    else:
+                        # Create goal entries for each selected metric
+                        full_name = f"Weights - {sub_category}: {exercise_name}"
+                        
+                        conn_add = get_conn()
+                        cur_add = conn_add.cursor()
+                        try:
+                            if track_weight and target_weight:
+                                goal_text = f"{full_name} - {target_weight} lbs"
+                                cur_add.execute(
+                                    "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                                    (st.session_state.user_id, goal_text, 'weight_lbs', target_weight, target_date)
+                                )
+                            
+                            if track_reps and target_reps:
+                                goal_text = f"{full_name} - {target_reps} reps"
+                                cur_add.execute(
+                                    "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                                    (st.session_state.user_id, goal_text, 'reps', target_reps, target_date)
+                                )
+                            
+                            if track_sets and target_sets:
+                                goal_text = f"{full_name} - {target_sets} sets"
+                                cur_add.execute(
+                                    "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                                    (st.session_state.user_id, goal_text, 'sets', target_sets, target_date)
+                                )
+                            
+                            conn_add.commit()
+                            st.success(f"Weight goal(s) added!")
+                            st.session_state.new_goal_category = None
+                            st.rerun()
+                        except Exception as e:
+                            conn_add.rollback()
+                            st.error(f"Error: {e}")
+                        finally:
+                            cur_add.close()
+                            conn_add.close()
+            
+            elif category == "Free-Text":
+                # Simple free-text goal
+                goal_description = st.text_area("Goal Description", placeholder="e.g., Touch my toes, Hold plank for 2 minutes, etc.")
+                target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
+                
+                submitted = st.form_submit_button("Add Goal", type="primary")
+                
+                if submitted:
+                    if not goal_description:
+                        st.error("Please describe your goal.")
+                    else:
+                        conn_add = get_conn()
+                        cur_add = conn_add.cursor()
+                        try:
+                            cur_add.execute(
+                                "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
+                                (st.session_state.user_id, f"Free-Text: {goal_description}", 'free_text', 1, target_date)
+                            )
+                            conn_add.commit()
+                            st.success("Free-text goal added!")
+                            st.session_state.new_goal_category = None
+                            st.rerun()
+                        except Exception as e:
+                            conn_add.rollback()
+                            st.error(f"Error: {e}")
+                        finally:
+                            cur_add.close()
+                            conn_add.close()
+    else:
+        st.info("Select a category above to begin creating your goal.")
