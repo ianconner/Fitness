@@ -290,6 +290,12 @@ def main():
     # Initialize session state for goal form
     if 'new_goal_category' not in st.session_state:
         st.session_state.new_goal_category = None
+    if 'track_weight' not in st.session_state:
+        st.session_state.track_weight = True
+    if 'track_reps' not in st.session_state:
+        st.session_state.track_reps = False
+    if 'track_sets' not in st.session_state:
+        st.session_state.track_sets = False
     
     # Category selection (outside form for reactivity)
     category = st.selectbox(
@@ -300,8 +306,8 @@ def main():
     st.session_state.new_goal_category = category
 
     if category:
-        with st.form("add_goal"):
-            if category == "Cardio":
+        if category == "Cardio":
+            with st.form("add_goal"):
                 # Sub-category
                 sub_category = st.selectbox("Type", ["Running", "Walking", "Elliptical", "Other"])
                 
@@ -310,16 +316,25 @@ def main():
                 selected_ex = st.selectbox("Exercise (select or type new)", [""] + cardio_exercises, key="cardio_ex_select")
                 exercise_name = st.text_input("or type new name", value=selected_ex, key="cardio_ex_input")
                 
-                # Distance and Time
+                # Distance
+                distance = st.number_input("Distance (miles)", min_value=0.1, step=0.1, value=2.0)
+                
+                # Time input in MM:SS format
+                st.markdown("**Target Time**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    distance = st.number_input("Distance (miles)", min_value=0.1, step=0.1, value=2.0)
+                    minutes = st.number_input("Minutes", min_value=0, step=1, value=18, key="time_min")
                 with col2:
-                    time_target = st.number_input("Target Time (minutes)", min_value=1, step=1, value=18)
+                    seconds = st.number_input("Seconds", min_value=0, max_value=59, step=1, value=0, key="time_sec")
+                
+                time_target = minutes + (seconds / 60)  # Convert to decimal minutes for storage
                 
                 # Calculate and display pace
-                target_pace = time_target / distance if distance > 0 else 0
-                st.info(f"**Target Pace: {target_pace:.2f} min/mi**")
+                if distance > 0:
+                    target_pace_decimal = time_target / distance
+                    pace_min = int(target_pace_decimal)
+                    pace_sec = int((target_pace_decimal - pace_min) * 60)
+                    st.info(f"**Target Pace: {pace_min}:{pace_sec:02d} per mile**")
                 
                 # Target date
                 target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
@@ -330,9 +345,9 @@ def main():
                     if not exercise_name:
                         st.error("Please enter an exercise name.")
                     else:
-                        # Format goal text
+                        # Format goal text with time in MM:SS format
                         full_name = f"Cardio - {sub_category}: {exercise_name}" if exercise_name else f"Cardio - {sub_category}"
-                        goal_text = f"{full_name} - {distance} miles in {time_target} min"
+                        goal_text = f"{full_name} - {distance} miles in {minutes}:{seconds:02d}"
                         
                         conn_add = get_conn()
                         cur_add = conn_add.cursor()
@@ -351,8 +366,19 @@ def main():
                         finally:
                             cur_add.close()
                             conn_add.close()
+        
+        elif category == "Weights":
+            # Checkboxes OUTSIDE form for reactivity
+            st.markdown("**Goal Metrics** (select one or more):")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.session_state.track_weight = st.checkbox("Weight", value=st.session_state.track_weight, key="cb_weight")
+            with col2:
+                st.session_state.track_reps = st.checkbox("Reps", value=st.session_state.track_reps, key="cb_reps")
+            with col3:
+                st.session_state.track_sets = st.checkbox("Sets", value=st.session_state.track_sets, key="cb_sets")
             
-            elif category == "Weights":
+            with st.form("add_goal"):
                 # Sub-category
                 sub_category = st.selectbox("Type", ["Free-Weights", "Machine", "Body-Weights"])
                 
@@ -361,22 +387,18 @@ def main():
                 selected_ex = st.selectbox("Exercise (select or type new)", [""] + weight_exercises, key="weight_ex_select")
                 exercise_name = st.text_input("or type new name", value=selected_ex, key="weight_ex_input")
                 
-                # Goal type checkboxes
-                st.markdown("**Goal Metrics** (select one or more):")
-                
-                track_weight = st.checkbox("Weight", value=True)
+                # Show input fields based on checkboxes
                 target_weight = None
-                if track_weight:
-                    target_weight = st.number_input("Target (lbs)", min_value=1.0, step=5.0, value=100.0, key="weight_target")
-                
-                track_reps = st.checkbox("Reps")
                 target_reps = None
-                if track_reps:
+                target_sets = None
+                
+                if st.session_state.track_weight:
+                    target_weight = st.number_input("Target Weight (lbs)", min_value=1.0, step=5.0, value=100.0, key="weight_target")
+                
+                if st.session_state.track_reps:
                     target_reps = st.number_input("Target Reps", min_value=1, step=1, value=10, key="reps_target")
                 
-                track_sets = st.checkbox("Sets")
-                target_sets = None
-                if track_sets:
+                if st.session_state.track_sets:
                     target_sets = st.number_input("Target Sets", min_value=1, step=1, value=3, key="sets_target")
                 
                 # Target date
@@ -387,7 +409,7 @@ def main():
                 if submitted:
                     if not exercise_name:
                         st.error("Please enter an exercise name.")
-                    elif not (track_weight or track_reps or track_sets):
+                    elif not (st.session_state.track_weight or st.session_state.track_reps or st.session_state.track_sets):
                         st.error("Please select at least one goal metric.")
                     else:
                         # Create goal entries for each selected metric
@@ -396,21 +418,21 @@ def main():
                         conn_add = get_conn()
                         cur_add = conn_add.cursor()
                         try:
-                            if track_weight and target_weight:
+                            if st.session_state.track_weight and target_weight:
                                 goal_text = f"{full_name} - {target_weight} lbs"
                                 cur_add.execute(
                                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                                     (st.session_state.user_id, goal_text, 'weight_lbs', target_weight, target_date)
                                 )
                             
-                            if track_reps and target_reps:
+                            if st.session_state.track_reps and target_reps:
                                 goal_text = f"{full_name} - {target_reps} reps"
                                 cur_add.execute(
                                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
                                     (st.session_state.user_id, goal_text, 'reps', target_reps, target_date)
                                 )
                             
-                            if track_sets and target_sets:
+                            if st.session_state.track_sets and target_sets:
                                 goal_text = f"{full_name} - {target_sets} sets"
                                 cur_add.execute(
                                     "INSERT INTO goals (user_id, exercise, metric_type, target_value, target_date) VALUES (%s, %s, %s, %s, %s)",
@@ -419,6 +441,10 @@ def main():
                             
                             conn_add.commit()
                             st.success(f"Weight goal(s) added!")
+                            # Reset checkboxes
+                            st.session_state.track_weight = True
+                            st.session_state.track_reps = False
+                            st.session_state.track_sets = False
                             st.session_state.new_goal_category = None
                             st.rerun()
                         except Exception as e:
@@ -427,8 +453,9 @@ def main():
                         finally:
                             cur_add.close()
                             conn_add.close()
-            
-            elif category == "Free-Text":
+        
+        elif category == "Free-Text":
+            with st.form("add_goal"):
                 # Simple free-text goal
                 goal_description = st.text_area("Goal Description", placeholder="e.g., Touch my toes, Hold plank for 2 minutes, etc.")
                 target_date = st.date_input("Target Date", value=date.today() + timedelta(days=30))
