@@ -24,19 +24,46 @@ def parse_exercise_name(exercise_str):
             return cat_sub, None, name
     return None, None, name
 
+def format_time_mmss(decimal_minutes):
+    """Convert decimal minutes to MM:SS format"""
+    if pd.isna(decimal_minutes) or decimal_minutes <= 0:
+        return "0:00"
+    minutes = int(decimal_minutes)
+    seconds = int((decimal_minutes - minutes) * 60)
+    return f"{minutes}:{seconds:02d}"
+
+def format_pace_mmss(pace_decimal):
+    """Convert decimal pace to MM:SS per mile format"""
+    if pd.isna(pace_decimal) or pace_decimal <= 0:
+        return "-"
+    minutes = int(pace_decimal)
+    seconds = int((pace_decimal - minutes) * 60)
+    return f"{minutes}:{seconds:02d}"
+
 def extract_pace_goal(goal_text):
-    """Extract distance and time from goal text like 'Run 2 miles in 18 min'"""
+    """Extract distance and time from goal text"""
     text = goal_text.lower()
     dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', text)
-    time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)
+    # Match both MM:SS and plain minutes format
+    time_match = re.search(r'(\d+):(\d+)', text)  # MM:SS format
+    if not time_match:
+        time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)  # Plain minutes
+    
     distance = float(dist_match.group(1)) if dist_match else None
-    total_time = float(time_match.group(1)) if time_match else None
+    
+    if time_match:
+        if ':' in time_match.group(0):  # MM:SS format
+            minutes = int(time_match.group(1))
+            seconds = int(time_match.group(2))
+            total_time = minutes + (seconds / 60)
+        else:  # Plain minutes
+            total_time = float(time_match.group(1))
+    else:
+        total_time = None
+    
     if distance and total_time and distance > 0:
         return distance, total_time
     return None, None
-
-def calculate_pace_min_mi(distance_mi, total_time_min):
-    return total_time_min / distance_mi if distance_mi and distance_mi > 0 else None
 
 def main():
     st.markdown("## Dashboard")
@@ -99,9 +126,13 @@ def main():
         df_workouts['total_effort'] = (df_workouts['time_min'] + df_workouts['rest_min']) * df_workouts['reps']
         df_workouts['pace_min_mi'] = df_workouts['total_effort'] / df_workouts['distance_mi']
 
-        # Format
-        for col in ['weight_lbs', 'time_min', 'distance_mi', 'pace_min_mi']:
-            df_workouts[col] = df_workouts[col].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
+        # Format for display - keep numeric for calculations, create formatted columns
+        df_workouts['time_display'] = df_workouts['time_min'].apply(format_time_mmss)
+        df_workouts['pace_display'] = df_workouts['pace_min_mi'].apply(format_pace_mmss)
+        
+        # Format other columns
+        df_workouts['weight_lbs'] = df_workouts['weight_lbs'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
+        df_workouts['distance_mi'] = df_workouts['distance_mi'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
         for col in ['sets', 'reps', 'rest_min']:
             df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan', '<NA>'], '-')
 
@@ -426,12 +457,16 @@ def main():
                 st.markdown(f"### {exercise}")
                 
                 if data['type'] == 'pace':
-                    # Goal details
-                    st.markdown(f"**Goal:** {data['goal_distance']:.1f} mi in {data['goal_time']:.0f} min ({data['goal_pace']:.2f} min/mi pace)")
+                    # Goal details with MM:SS format
+                    goal_time_formatted = format_time_mmss(data['goal_time'])
+                    goal_pace_formatted = format_pace_mmss(data['goal_pace'])
+                    st.markdown(f"**Goal:** {data['goal_distance']:.1f} mi in {goal_time_formatted} ({goal_pace_formatted}/mi pace)")
                     
-                    # Best performance
+                    # Best performance with MM:SS format
                     if data.get('best_pace'):
-                        st.markdown(f"**Best:** {data['best_distance']:.1f} mi in {data['best_time']:.0f} min ({data['best_pace']:.2f} min/mi pace)")
+                        best_time_formatted = format_time_mmss(data['best_time'])
+                        best_pace_formatted = format_pace_mmss(data['best_pace'])
+                        st.markdown(f"**Best:** {data['best_distance']:.1f} mi in {best_time_formatted} ({best_pace_formatted}/mi pace)")
                         st.markdown(f"**Achievements:** Pace ⭐x{data['pace_stars']} | Distance ⭐x{data['distance_stars']}")
                     else:
                         st.markdown("**Best:** No cardio data yet")
