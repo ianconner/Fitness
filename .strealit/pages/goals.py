@@ -10,18 +10,45 @@ def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
 def extract_pace_goal(goal_text):
-    """Extract distance and time from goal text like 'Run 2 miles in 18 min'"""
+    """Extract distance and time from goal text like 'Run 2 miles in 18:30'"""
     text = goal_text.lower()
     dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', text)
-    time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)
+    # Match both MM:SS and plain minutes format
+    time_match = re.search(r'(\d+):(\d+)', text)  # MM:SS format
+    if not time_match:
+        time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)  # Plain minutes
+    
     distance = float(dist_match.group(1)) if dist_match else None
-    total_time = float(time_match.group(1)) if time_match else None
+    
+    if time_match:
+        if ':' in time_match.group(0):  # MM:SS format
+            minutes = int(time_match.group(1))
+            seconds = int(time_match.group(2))
+            total_time = minutes + (seconds / 60)
+        else:  # Plain minutes
+            total_time = float(time_match.group(1))
+    else:
+        total_time = None
+    
     if distance and total_time and distance > 0:
         return distance, total_time
     return None, None
 
-def calculate_pace_min_mi(distance_mi, total_time_min):
-    return total_time_min / distance_mi if distance_mi and distance_mi > 0 else None
+def format_time_mmss(decimal_minutes):
+    """Convert decimal minutes to MM:SS format"""
+    if pd.isna(decimal_minutes) or decimal_minutes <= 0:
+        return "0:00"
+    minutes = int(decimal_minutes)
+    seconds = int((decimal_minutes - minutes) * 60)
+    return f"{minutes}:{seconds:02d}"
+
+def format_pace_mmss(pace_decimal):
+    """Convert decimal pace to MM:SS per mile format"""
+    if pd.isna(pace_decimal) or pace_decimal <= 0:
+        return "-"
+    minutes = int(pace_decimal)
+    seconds = int((pace_decimal - minutes) * 60)
+    return f"{minutes}:{seconds:02d}"
 
 def main():
     st.markdown("## Goals")
@@ -215,10 +242,14 @@ def main():
                         status = "On Track" if days_left > 7 else "Urgent" if days_left >= 0 else "Overdue"
                         
                         if data['type'] == 'pace':
-                            st.caption(f"Goal: {data.get('goal_distance', 0):.1f} mi in {data.get('goal_time', 0):.0f} min ({data.get('goal_pace', 0):.2f} min/mi pace)")
+                            goal_time_formatted = format_time_mmss(data.get('goal_time', 0))
+                            goal_pace_formatted = format_pace_mmss(data.get('goal_pace', 0))
+                            st.caption(f"Goal: {data.get('goal_distance', 0):.1f} mi in {goal_time_formatted} ({goal_pace_formatted}/mi pace)")
                             
                             if data.get('best_pace'):
-                                st.caption(f"Best: {data.get('best_distance', 0):.1f} mi in {data.get('best_time', 0):.0f} min ({data['best_pace']:.2f} min/mi pace)")
+                                best_time_formatted = format_time_mmss(data.get('best_time', 0))
+                                best_pace_formatted = format_pace_mmss(data['best_pace'])
+                                st.caption(f"Best: {data.get('best_distance', 0):.1f} mi in {best_time_formatted} ({best_pace_formatted}/mi pace)")
                             else:
                                 st.caption("Best: No data yet")
                             
@@ -359,6 +390,9 @@ def main():
                             conn_add.commit()
                             st.success("Cardio goal added!")
                             st.session_state.new_goal_category = None
+                            # Clear the category selection
+                            if 'goal_category_select' in st.session_state:
+                                del st.session_state['goal_category_select']
                             st.rerun()
                         except Exception as e:
                             conn_add.rollback()
@@ -446,6 +480,9 @@ def main():
                             st.session_state.track_reps = False
                             st.session_state.track_sets = False
                             st.session_state.new_goal_category = None
+                            # Clear the category selection
+                            if 'goal_category_select' in st.session_state:
+                                del st.session_state['goal_category_select']
                             st.rerun()
                         except Exception as e:
                             conn_add.rollback()
@@ -476,6 +513,9 @@ def main():
                             conn_add.commit()
                             st.success("Free-text goal added!")
                             st.session_state.new_goal_category = None
+                            # Clear the category selection
+                            if 'goal_category_select' in st.session_state:
+                                del st.session_state['goal_category_select']
                             st.rerun()
                         except Exception as e:
                             conn_add.rollback()
