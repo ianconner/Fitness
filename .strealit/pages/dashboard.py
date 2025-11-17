@@ -114,27 +114,28 @@ def main():
 
     # DATA PREP
     if not df_workouts.empty:
-        cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike']
+        # Classify workouts as Cardio or Weight FIRST
+        cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike', 'cardio']
         def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
         df_workouts['type'] = df_workouts['exercise'].apply(classify)
 
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'sets', 'reps', 'rest_min']:
             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
-        df_workouts['distance_mi'] = df_workouts['distance_mi'].replace(0, np.nan)
+        df_workouts['distance_mi_numeric'] = df_workouts['distance_mi'].replace(0, np.nan)
 
         # PACE: ((time + rest) * reps) / distance
         df_workouts['total_effort'] = (df_workouts['time_min'] + df_workouts['rest_min']) * df_workouts['reps']
-        df_workouts['pace_min_mi'] = df_workouts['total_effort'] / df_workouts['distance_mi']
+        df_workouts['pace_min_mi'] = df_workouts['total_effort'] / df_workouts['distance_mi_numeric']
 
         # Format for display - keep numeric for calculations, create formatted columns
         df_workouts['time_display'] = df_workouts['time_min'].apply(format_time_mmss)
         df_workouts['pace_display'] = df_workouts['pace_min_mi'].apply(format_pace_mmss)
         
-        # Format other columns
-        df_workouts['weight_lbs'] = df_workouts['weight_lbs'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
-        df_workouts['distance_mi'] = df_workouts['distance_mi'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
+        # Format other columns for display
+        df_workouts['weight_lbs_display'] = df_workouts['weight_lbs'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
+        df_workouts['distance_mi_display'] = df_workouts['distance_mi'].round(2).astype(str).replace(['0.0', '0', 'nan', 'inf', '<NA>'], '-')
         for col in ['sets', 'reps', 'rest_min']:
-            df_workouts[col] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan', '<NA>'], '-')
+            df_workouts[f'{col}_display'] = df_workouts[col].astype(str).replace(['0.0', '0', 'nan', '<NA>'], '-')
 
         # Metrics
         col1, col2, col3 = st.columns(3)
