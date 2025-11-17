@@ -171,11 +171,11 @@ def main():
                 if not cardio.empty:
                     st.markdown("##### Cardio")
                     st.dataframe(cardio[['exercise', 'time_min', 'distance_mi', 'pace_min_mi']].rename(
-                        columns={'time_min':'Time','distance_mi':'Dist','pace_min_mi':'Pace'}), width='stretch')
+                        columns={'time_min':'Time','distance_mi':'Dist','pace_min_mi':'Pace'}), use_container_width=True)
                 if not weight.empty:
                     st.markdown("##### Weight")
                     st.dataframe(weight[['exercise','weight_lbs','sets','reps','rest_min']].rename(
-                        columns={'weight_lbs':'Wt','sets':'S','reps':'R','rest_min':'Rest'}), width='stretch')
+                        columns={'weight_lbs':'Wt','sets':'S','reps':'R','rest_min':'Rest'}), use_container_width=True)
                 
                 e1, e2 = st.columns(2)
                 with e1:
@@ -315,7 +315,7 @@ def main():
 
                 s1, s2 = st.columns(2)
                 with s1:
-                    if st.button("💾 Save Changes", type="primary", width='stretch'):
+                    if st.button("💾 Save Changes", type="primary", use_container_width=True):
                         try:
                             cu = conn_e.cursor()
                             cu.execute("UPDATE workouts SET workout_date=%s, notes=%s, duration_min=%s WHERE id=%s AND user_id=%s",
@@ -336,7 +336,7 @@ def main():
                             cur_e.close()
                             conn_e.close()
                 with s2:
-                    if st.button("❌ Cancel", width='stretch'):
+                    if st.button("❌ Cancel", use_container_width=True):
                         st.session_state.editing_workout_id = None
                         st.rerun()
 
@@ -387,8 +387,11 @@ def main():
                 goal_pace = time / dist
                 goal_distance = dist
                 
-                # Identify cardio workouts
-                cardio = df_workouts[df_workouts['type'] == 'Cardio'].copy()
+                # Identify cardio workouts (check if type column exists)
+                if not df_workouts.empty and 'type' in df_workouts.columns:
+                    cardio = df_workouts[df_workouts['type'] == 'Cardio'].copy()
+                else:
+                    cardio = pd.DataFrame()  # Empty dataframe if no workouts
                 
                 if not cardio.empty:
                     # Convert pace to numeric
@@ -437,11 +440,11 @@ def main():
             
             else:
                 # Non-pace goal
-                matches = df_workouts[df_workouts['exercise'].str.contains(exercise, case=False, na=False)]
+                matches = df_workouts[df_workouts['exercise'].str.contains(exercise, case=False, na=False)] if not df_workouts.empty else pd.DataFrame()
                 current = 0
                 if not matches.empty and metric in matches.columns:
                     current = pd.to_numeric(matches[metric], errors='coerce').max()
-                pct = min((current / target) * 100, 100) if target > 0 else 0
+                pct = min((current / target) * 100, 100) if target > 0 and not pd.isna(current) else 0
                 progress[exercise] = {
                     'type': 'value',
                     'current': current,
