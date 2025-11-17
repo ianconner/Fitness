@@ -89,6 +89,12 @@ def main():
             'exercise', 'sets', 'reps', 'weight_lbs', 'time_min',
             'distance_mi', 'rest_min', 'ex_notes'
         ])
+        
+        # Classify workouts immediately after loading
+        if not df_workouts.empty:
+            cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike', 'cardio']
+            def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
+            df_workouts['type'] = df_workouts['exercise'].apply(classify)
 
         # Goals
         cur.execute("""
@@ -114,11 +120,7 @@ def main():
 
     # DATA PREP
     if not df_workouts.empty:
-        # Classify workouts as Cardio or Weight FIRST
-        cardio_keywords = ['run', 'running', 'walk', 'walking', 'elliptical', 'rowing', 'swim', 'cycling', 'bike', 'cardio']
-        def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
-        df_workouts['type'] = df_workouts['exercise'].apply(classify)
-
+        # Type column already created above, now do numeric conversions
         for col in ['weight_lbs', 'time_min', 'distance_mi', 'sets', 'reps', 'rest_min']:
             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         df_workouts['distance_mi_numeric'] = df_workouts['distance_mi'].replace(0, np.nan)
