@@ -17,7 +17,7 @@ def main():
     if "exercises" not in st.session_state:
         st.session_state.exercises = [{
             "category": None, "sub_category": None, "exercise": "", "sets": 1, "reps": 1,
-            "weight_lbs": 0.0, "time_min": 0.0, "rest_min": 1.5, "distance_mi": 0.0,
+            "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0,
             "pace_min_mi": 0.0, "notes": "", "previous_category": None
         }]
     exercises = st.session_state.exercises
@@ -26,7 +26,7 @@ def main():
     try:
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute("SELECT DISTINCT exercise FROM workout_exercises WHERE user_id = %s", (st.session_state.user_id,))
+        cur.execute("SELECT DISTINCT exercise FROM workout_exercises WHERE exercise IS NOT NULL")
         past_exercises = [row[0] for row in cur.fetchall() if row[0]]
         conn.close()
     except:
@@ -72,16 +72,31 @@ def main():
                 else:
                     ex["rest_min"] = 0.0
 
-                col_time, col_dist = st.columns(2)
-                with col_time:
-                    ex["time_min"] = st.number_input("Time (min)", min_value=0.0, value=ex["time_min"], key=f"time_{i}", step=0.5)
-                with col_dist:
-                    ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=f"dist_{i}", step=0.1)
+                # Time input in MM:SS format
+                st.markdown("**Time per Rep**")
+                col_time1, col_time2 = st.columns(2)
+                with col_time1:
+                    time_minutes = st.number_input("Minutes", min_value=0, step=1, value=int(ex.get("time_min", 0)), key=f"time_min_{i}")
+                with col_time2:
+                    time_seconds = st.number_input("Seconds", min_value=0, max_value=59, step=1, value=ex.get("time_sec", 0), key=f"time_sec_{i}")
+                
+                ex["time_min"] = time_minutes + (time_seconds / 60)
+                ex["time_sec"] = time_seconds
+                
+                # Distance
+                ex["distance_mi"] = st.number_input("Distance (mi)", min_value=0.0, value=ex["distance_mi"], key=f"dist_{i}", step=0.1)
 
-                # CORRECT PACE: ((time + rest) * reps) / distance
+                # Calculate and display pace in MM:SS format
                 total_effort = (ex["time_min"] + ex["rest_min"]) * ex["reps"]
-                ex["pace_min_mi"] = total_effort / ex["distance_mi"] if ex["distance_mi"] > 0 else 0
-                st.caption(f"**Pace: {ex['pace_min_mi']:.2f} min/mi**" if ex["distance_mi"] > 0 else "**Pace: -** (Enter distance)")
+                if ex["distance_mi"] > 0:
+                    pace_decimal = total_effort / ex["distance_mi"]
+                    pace_min = int(pace_decimal)
+                    pace_sec = int((pace_decimal - pace_min) * 60)
+                    st.caption(f"**Pace: {pace_min}:{pace_sec:02d} per mile**")
+                    ex["pace_min_mi"] = pace_decimal
+                else:
+                    st.caption("**Pace: -** (Enter distance)")
+                    ex["pace_min_mi"] = 0
 
                 ex["sets"] = 1
                 ex["weight_lbs"] = 0.0
@@ -104,6 +119,7 @@ def main():
                 ex["weight_lbs"] = st.number_input("Weight (lbs)", min_value=0.0, value=ex["weight_lbs"], key=f"weight_{i}", step=5.0)
                 ex["rest_min"] = st.number_input("Rest Between Sets (min)", min_value=0.0, value=ex["rest_min"], key=f"rest_{i}", step=0.5)
                 ex["time_min"] = ex["distance_mi"] = 0.0
+                ex["time_sec"] = 0
 
                 with st.expander("Details", expanded=True):
                     base_name = st.selectbox(
@@ -119,14 +135,24 @@ def main():
 
             elif ex["category"] == "Free-Text":
                 ex["exercise"] = st.text_area("Describe Your Exercise", value=ex["exercise"], key=f"free_desc_{i}")
-                ex["time_min"] = st.number_input("Time (min) - Optional", min_value=0.0, value=ex["time_min"], key=f"time_{i}", step=0.5)
+                
+                # Time input in MM:SS format for free text too
+                st.markdown("**Time (Optional)**")
+                col_time1, col_time2 = st.columns(2)
+                with col_time1:
+                    time_minutes = st.number_input("Minutes", min_value=0, step=1, value=int(ex.get("time_min", 0)), key=f"free_time_min_{i}")
+                with col_time2:
+                    time_seconds = st.number_input("Seconds", min_value=0, max_value=59, step=1, value=ex.get("time_sec", 0), key=f"free_time_sec_{i}")
+                
+                ex["time_min"] = time_minutes + (time_seconds / 60)
+                ex["time_sec"] = time_seconds
                 ex["sets"] = ex["reps"] = 1
                 ex["weight_lbs"] = ex["distance_mi"] = ex["rest_min"] = 0.0
                 ex["notes"] = ""
 
             else:
                 st.info("Select a category to begin.")
-                ex.update({"sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, "rest_min": 1.5, "distance_mi": 0.0, "pace_min_mi": 0.0, "exercise": "", "notes": ""})
+                ex.update({"sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0, "pace_min_mi": 0.0, "exercise": "", "notes": ""})
 
             st.divider()
 
@@ -136,7 +162,7 @@ def main():
         if st.button("Add Exercise"):
             exercises.append({
                 "category": None, "sub_category": None, "exercise": "", "sets": 1, "reps": 1,
-                "weight_lbs": 0.0, "time_min": 0.0, "rest_min": 1.5, "distance_mi": 0.0,
+                "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0,
                 "pace_min_mi": 0.0, "notes": "", "previous_category": None
             })
             st.rerun()
