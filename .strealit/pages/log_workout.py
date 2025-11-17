@@ -11,7 +11,6 @@ def main():
 
     # Real-time section (outside form for reactivity)
     workout_date = st.date_input("Date", value=date.today())
-    duration_min = st.number_input("Duration (min)", min_value=1, value=30)
 
     # Initialize exercises in session_state
     if "exercises" not in st.session_state:
@@ -184,7 +183,7 @@ def main():
                 try:
                     cur.execute(
                         "INSERT INTO workouts (user_id, workout_date, notes, duration_min) VALUES (%s, %s, %s, %s) RETURNING id",
-                        (st.session_state.user_id, workout_date, "", duration_min)
+                        (st.session_state.user_id, workout_date, "", 0)
                     )
                     workout_id = cur.fetchone()[0]
                     for ex in exercises:
