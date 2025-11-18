@@ -411,144 +411,89 @@ def main():
 
     # GOALS SECTION - THE HUB
     st.subheader("Active Goals")
-    if not df_goals.empty:
+    
+    # Load goals with linked workout data
+    try:
+        goals_query = """
+            SELECT g.id, g.exercise, g.metric_type, g.target_value, g.target_date,
+                   COUNT(we.id) as linked_workouts,
+                   MAX(CASE 
+                       WHEN g.metric_type = 'reps' THEN we.reps
+                       WHEN g.metric_type = 'sets' THEN we.sets
+                       WHEN g.metric_type = 'weight_lbs' THEN we.weight_lbs
+                       WHEN g.metric_type = 'time_min' THEN we.time_min
+                       WHEN g.metric_type = 'distance_mi' THEN we.distance_mi
+                   END) as best_value
+            FROM goals g
+            LEFT JOIN workout_exercises we ON g.id = we.goal_id
+            WHERE g.user_id = %s AND g.target_date >= %s
+            GROUP BY g.id, g.exercise, g.metric_type, g.target_value, g.target_date
+            ORDER BY g.target_date
+        """
+        conn_goals = get_conn()
+        df_goals_linked = pd.read_sql(goals_query, conn_goals, params=(st.session_state.user_id, date.today()))
+        conn_goals.close()
+        
+        if not df_goals_linked.empty:
+            df_goals_linked['target_date'] = pd.to_datetime(df_goals_linked['target_date']).dt.date
+            df_goals_linked['target_value'] = pd.to_numeric(df_goals_linked['target_value'], errors='coerce')
+            df_goals_linked['best_value'] = pd.to_numeric(df_goals_linked['best_value'], errors='coerce')
+    except Exception as e:
+        st.error(f"Error loading goals: {e}")
+        df_goals_linked = pd.DataFrame()
+    
+    if not df_goals_linked.empty:
         progress = {}
 
-        for _, row in df_goals.iterrows():
+        for _, row in df_goals_linked.iterrows():
             exercise = row['exercise']
             metric = row['metric_type']
             target = float(row['target_value'])
+            best = row['best_value'] if not pd.isna(row['best_value']) else 0
+            linked_count = int(row['linked_workouts'])
             
-            # Check for pace-based cardio goal
-            dist, time = extract_pace_goal(exercise)
-            
-            if dist and time and metric == 'time_min':
-                goal_pace = time / dist
-                goal_distance = dist
-                
-                # FIX: Check if workouts exist AND if type column exists
-                if not df_workouts.empty and 'type' in df_workouts.columns:
-                    cardio = df_workouts[df_workouts['type'] == 'Cardio'].copy()
-                else:
-                    cardio = pd.DataFrame()  # Empty dataframe if no workouts or no type column
-                
-                if not cardio.empty:
-                    # Convert pace to numeric
-                    cardio['pace_numeric'] = pd.to_numeric(cardio['pace_min_mi'], errors='coerce')
-                    cardio['distance_numeric'] = pd.to_numeric(cardio['distance_mi'], errors='coerce')
-                    
-                    # Best pace achieved (any distance)
-                    best_pace = cardio['pace_numeric'].min()
-                    best_pace_workout = cardio[cardio['pace_numeric'] == best_pace].iloc[0]
-                    
-                    # Longest distance achieved
-                    best_distance = cardio['distance_numeric'].max()
-                    
-                    # Star counts
-                    pace_stars = len(cardio[cardio['pace_numeric'] <= goal_pace])
-                    distance_stars = len(cardio[cardio['distance_numeric'] >= goal_distance])
-                    
-                    # Progress percentages
-                    pace_pct = min((goal_pace / best_pace) * 100, 100) if not pd.isna(best_pace) and best_pace > 0 else 0
-                    distance_pct = min((best_distance / goal_distance) * 100, 100) if not pd.isna(best_distance) and goal_distance > 0 else 0
-                    
-                    progress[exercise] = {
-                        'type': 'pace',
-                        'goal_pace': goal_pace,
-                        'goal_distance': goal_distance,
-                        'goal_time': time,
-                        'best_pace': best_pace,
-                        'best_distance': best_distance,
-                        'best_time': pd.to_numeric(best_pace_workout['time_min'], errors='coerce'),
-                        'pace_pct': pace_pct,
-                        'distance_pct': distance_pct,
-                        'pace_stars': pace_stars,
-                        'distance_stars': distance_stars
-                    }
-                else:
-                    progress[exercise] = {
-                        'type': 'pace',
-                        'goal_pace': goal_pace,
-                        'goal_distance': goal_distance,
-                        'goal_time': time,
-                        'pace_pct': 0,
-                        'distance_pct': 0,
-                        'pace_stars': 0,
-                        'distance_stars': 0
-                    }
-            
+            # Calculate progress percentage
+            if best > 0 and target > 0:
+                progress_pct = min((best / target) * 100, 100)
             else:
-                # Non-pace goal
-                matches = df_workouts[df_workouts['exercise'].str.contains(exercise, case=False, na=False)] if not df_workouts.empty else pd.DataFrame()
-                current = 0
-                if not matches.empty and metric in matches.columns:
-                    current = pd.to_numeric(matches[metric], errors='coerce').max()
-                pct = min((current / target) * 100, 100) if target > 0 and not pd.isna(current) else 0
-                progress[exercise] = {
-                    'type': 'value',
-                    'current': current,
-                    'target': target,
-                    'metric': metric,
-                    'pct': pct
-                }
+                progress_pct = 0
+            
+            progress[exercise] = {
+                'type': 'value',
+                'current': best,
+                'target': target,
+                'metric': metric,
+                'pct': progress_pct,
+                'linked_count': linked_count
+            }
 
         # Display - Detailed Hub View
-        for _, row in df_goals.iterrows():
+        for _, row in df_goals_linked.iterrows():
             exercise = row['exercise']
             data = progress.get(exercise, {'type': 'value', 'pct': 0})
-            days_left = (pd.to_datetime(row['target_date']) - pd.Timestamp.today()).days
+            days_left = (row['target_date'] - date.today()).days
 
             with st.container(border=True):
                 st.markdown(f"### {exercise}")
                 
-                if data['type'] == 'pace':
-                    # Goal details with MM:SS format
-                    goal_time_formatted = format_time_mmss(data['goal_time'])
-                    goal_pace_formatted = format_pace_mmss(data['goal_pace'])
-                    st.markdown(f"**Goal:** {data['goal_distance']:.1f} mi in {goal_time_formatted} ({goal_pace_formatted}/mi pace)")
-                    
-                    # Best performance with MM:SS format
-                    if data.get('best_pace'):
-                        best_time_formatted = format_time_mmss(data['best_time'])
-                        best_pace_formatted = format_pace_mmss(data['best_pace'])
-                        st.markdown(f"**Best:** {data['best_distance']:.1f} mi in {best_time_formatted} ({best_pace_formatted}/mi pace)")
-                        st.markdown(f"**Achievements:** Pace ⭐x{data['pace_stars']} | Distance ⭐x{data['distance_stars']}")
-                    else:
-                        st.markdown("**Best:** No cardio data yet")
-                    
-                    # Status
-                    status = "🟢 On Track" if days_left > 7 else "🟡 Urgent" if days_left >= 0 else "🔴 Overdue"
-                    st.caption(f"Due: {row['target_date'].strftime('%b %d, %Y')} ({days_left} days) | Status: {status}")
-                    
-                    # Progress bars
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        pace_label = f"Pace Progress: {data['pace_pct']:.0f}%"
-                        if data['pace_stars'] > 0:
-                            pace_label += " ⭐"
-                        st.caption(pace_label)
-                        st.progress(data['pace_pct'] / 100)
-                    
-                    with col2:
-                        dist_label = f"Distance Progress: {data['distance_pct']:.0f}%"
-                        if data['distance_stars'] > 0:
-                            dist_label += " ⭐"
-                        st.caption(dist_label)
-                        st.progress(data['distance_pct'] / 100)
+                # Standard goal display
+                metric_unit = row['metric_type'].replace('_', ' ').title()
+                st.markdown(f"**Goal:** {row['target_value']:.1f} {metric_unit}")
                 
+                if data.get('current', 0) > 0:
+                    st.markdown(f"**Best:** {data['current']:.1f} {metric_unit} | **Linked Workouts:** {data.get('linked_count', 0)}")
                 else:
-                    # Standard goal
-                    metric_unit = row['metric_type'].replace('_', ' ')
-                    st.markdown(f"**Goal:** {data['target']:.1f} {metric_unit}")
-                    st.markdown(f"**Current:** {data['current']:.1f} {metric_unit}" if data.get('current') else "**Current:** No data")
-                    
-                    status = "🟢 On Track" if days_left > 7 else "🟡 Urgent" if days_left >= 0 else "🔴 Overdue"
-                    st.caption(f"Due: {row['target_date'].strftime('%b %d, %Y')} ({days_left} days) | Status: {status}")
-                    
-                    progress_label = f"Progress: {data['pct']:.0f}%"
-                    if data['pct'] >= 100:
-                        progress_label += " ⭐"
-                    st.caption(progress_label)
-                    st.progress(data['pct'] / 100)
+                    st.markdown("**Best:** No linked workouts yet")
+                
+                status = "🟢 On Track" if days_left > 7 else "🟡 Urgent" if days_left >= 0 else "🔴 Overdue"
+                st.caption(f"**Due:** {row['target_date'].strftime('%b %d, %Y')} ({days_left} days) | **Status:** {status}")
+                
+                progress_label = f"Progress: {data['pct']:.0f}%"
+                if data['pct'] >= 100:
+                    progress_label += " ⭐ ACHIEVED!"
+                elif data['pct'] >= 75:
+                    progress_label += " 🔥"
+                st.caption(progress_label)
+                st.progress(data['pct'] / 100)
     else:
         st.info("No active goals. Visit the Goals page to set your first target!")
