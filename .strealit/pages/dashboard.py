@@ -162,48 +162,86 @@ def main():
 
         for idx, sess in sessions.iterrows():
             with st.container(border=True):
-                st.markdown(f"#### {sess['workout_date'].strftime('%b %d, %Y')}")
-                st.caption(f"**Duration:** {sess['duration_min']} min | **Notes:** {sess['notes']}")
+                # Header row with date and action buttons
+                header_col1, header_col2 = st.columns([3, 1])
+                with header_col1:
+                    st.markdown(f"### 🗓️ {sess['workout_date'].strftime('%A, %B %d, %Y')}")
+                with header_col2:
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        if st.button("✏️", key=f"edit_{sess['workout_id']}", help="Edit workout", use_container_width=True):
+                            st.session_state.editing_workout_id = sess['workout_id']
+                            st.rerun()
+                    with btn_col2:
+                        # Two-step delete: first click shows confirmation, second click deletes
+                        if st.session_state.confirm_delete_id == sess['workout_id']:
+                            if st.button("⚠️", key=f"confirm_{sess['workout_id']}", type="primary", help="Confirm delete", use_container_width=True):
+                                cdel = get_conn()
+                                curdel = cdel.cursor()
+                                try:
+                                    curdel.execute("DELETE FROM workout_exercises WHERE workout_id=%s",(sess['workout_id'],))
+                                    curdel.execute("DELETE FROM workouts WHERE id=%s AND user_id=%s",(sess['workout_id'], st.session_state.user_id))
+                                    cdel.commit()
+                                    st.session_state.confirm_delete_id = None
+                                    st.success("Deleted!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                                finally:
+                                    curdel.close()
+                                    cdel.close()
+                        else:
+                            if st.button("🗑️", key=f"del_{sess['workout_id']}", type="secondary", help="Delete workout", use_container_width=True):
+                                st.session_state.confirm_delete_id = sess['workout_id']
+                                st.rerun()
+                
+                # Workout metadata
+                meta_col1, meta_col2 = st.columns([1, 3])
+                with meta_col1:
+                    st.metric("Duration", f"{sess['duration_min']} min", delta=None)
+                with meta_col2:
+                    if sess['notes']:
+                        st.markdown(f"**Notes:** *{sess['notes']}*")
+                
+                st.divider()
+                
+                # Exercise data
                 ex = df_workouts[df_workouts['workout_id'] == sess['workout_id']]
                 cardio = ex[ex['type'] == 'Cardio']
                 weight = ex[ex['type'] == 'Weight']
                 
                 if not cardio.empty:
-                    st.markdown("##### Cardio")
-                    st.dataframe(cardio[['exercise', 'time_min', 'distance_mi', 'pace_min_mi']].rename(
-                        columns={'time_min':'Time','distance_mi':'Dist','pace_min_mi':'Pace'}), use_container_width=True)
-                if not weight.empty:
-                    st.markdown("##### Weight")
-                    st.dataframe(weight[['exercise','weight_lbs','sets','reps','rest_min']].rename(
-                        columns={'weight_lbs':'Wt','sets':'S','reps':'R','rest_min':'Rest'}), use_container_width=True)
+                    st.markdown("#### 🏃 Cardio")
+                    for _, row in cardio.iterrows():
+                        with st.container():
+                            ex_col1, ex_col2, ex_col3, ex_col4 = st.columns([3, 1, 1, 1])
+                            with ex_col1:
+                                st.markdown(f"**{row['exercise']}**")
+                            with ex_col2:
+                                if not pd.isna(row['time_min']) and row['time_min'] > 0:
+                                    st.caption(f"⏱️ {format_time_mmss(row['time_min'])}")
+                            with ex_col3:
+                                if not pd.isna(row['distance_mi']) and row['distance_mi'] > 0:
+                                    st.caption(f"📏 {row['distance_mi']:.2f} mi")
+                            with ex_col4:
+                                if not pd.isna(row['pace_min_mi']) and row['pace_min_mi'] > 0:
+                                    st.caption(f"⚡ {format_pace_mmss(row['pace_min_mi'])}/mi")
+                    st.markdown("")
                 
-                e1, e2 = st.columns(2)
-                with e1:
-                    if st.button("✏️ Edit", key=f"edit_{sess['workout_id']}"):
-                        st.session_state.editing_workout_id = sess['workout_id']
-                        st.rerun()
-                with e2:
-                    # Two-step delete: first click shows confirmation, second click deletes
-                    if st.session_state.confirm_delete_id == sess['workout_id']:
-                        if st.button("⚠️ Confirm Delete", key=f"confirm_{sess['workout_id']}", type="primary"):
-                            cdel = get_conn()
-                            curdel = cdel.cursor()
-                            try:
-                                curdel.execute("DELETE FROM workout_exercises WHERE workout_id=%s",(sess['workout_id'],))
-                                curdel.execute("DELETE FROM workouts WHERE id=%s AND user_id=%s",(sess['workout_id'], st.session_state.user_id))
-                                cdel.commit()
-                                st.session_state.confirm_delete_id = None
-                                st.success("Deleted!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                            finally:
-                                curdel.close()
-                                cdel.close()
-                    else:
-                        if st.button("🗑️ Delete", key=f"del_{sess['workout_id']}", type="secondary"):
-                            st.session_state.confirm_delete_id = sess['workout_id']
-                            st.rerun()
+                if not weight.empty:
+                    st.markdown("#### 💪 Weights")
+                    for _, row in weight.iterrows():
+                        with st.container():
+                            ex_col1, ex_col2, ex_col3 = st.columns([3, 1, 1])
+                            with ex_col1:
+                                st.markdown(f"**{row['exercise']}**")
+                            with ex_col2:
+                                sets_reps = f"{int(row['sets'])}×{int(row['reps'])}" if not pd.isna(row['sets']) and not pd.isna(row['reps']) else "-"
+                                st.caption(f"🔢 {sets_reps}")
+                            with ex_col3:
+                                if not pd.isna(row['weight_lbs']) and row['weight_lbs'] > 0:
+                                    st.caption(f"⚖️ {row['weight_lbs']:.0f} lbs")
+                    st.markdown("")
 
         # EDIT MODE - Place immediately after Recent Workouts
         if st.session_state.get("editing_workout_id"):
@@ -216,7 +254,8 @@ def main():
             with st.container(border=True):
                 edit_date = st.date_input("Date", value=sess['workout_date'])
                 edit_notes = st.text_area("Notes", value=sess['notes'])
-                edit_dur = st.number_input("Duration (min)", min_value=1, value=int(sess['duration_min']))
+                # FIX: Handle 0 duration by using max(1, value)
+                edit_dur = st.number_input("Duration (min)", min_value=1, value=max(1, int(sess['duration_min'])))
 
                 conn_e = get_conn()
                 cur_e = conn_e.cursor()
@@ -315,7 +354,7 @@ def main():
 
                 s1, s2 = st.columns(2)
                 with s1:
-                    if st.button("💾 Save Changes", type="primary", use_container_width=True):
+                    if st.button("💾 Save Changes", type="primary", width='stretch'):
                         try:
                             cu = conn_e.cursor()
                             cu.execute("UPDATE workouts SET workout_date=%s, notes=%s, duration_min=%s WHERE id=%s AND user_id=%s",
@@ -336,14 +375,14 @@ def main():
                             cur_e.close()
                             conn_e.close()
                 with s2:
-                    if st.button("❌ Cancel", use_container_width=True):
+                    if st.button("❌ Cancel", width='stretch'):
                         st.session_state.editing_workout_id = None
                         st.rerun()
 
             st.markdown("---")
 
         # PACE CHART
-        if not df_workouts[df_workouts['type'] == 'Cardio'].empty:
+        if 'type' in df_workouts.columns and not df_workouts[df_workouts['type'] == 'Cardio'].empty:
             st.subheader("Pace Trend")
             pace_df = df_workouts[df_workouts['type'] == 'Cardio'].copy()
             pace_df['pace'] = pd.to_numeric(pace_df['pace_min_mi'], errors='coerce')
@@ -387,11 +426,11 @@ def main():
                 goal_pace = time / dist
                 goal_distance = dist
                 
-                # Identify cardio workouts (check if type column exists)
+                # FIX: Check if workouts exist AND if type column exists
                 if not df_workouts.empty and 'type' in df_workouts.columns:
                     cardio = df_workouts[df_workouts['type'] == 'Cardio'].copy()
                 else:
-                    cardio = pd.DataFrame()  # Empty dataframe if no workouts
+                    cardio = pd.DataFrame()  # Empty dataframe if no workouts or no type column
                 
                 if not cardio.empty:
                     # Convert pace to numeric
