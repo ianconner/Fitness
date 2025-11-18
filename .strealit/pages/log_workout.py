@@ -17,7 +17,7 @@ def main():
         st.session_state.exercises = [{
             "category": None, "sub_category": None, "exercise": "", "sets": 1, "reps": 1,
             "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0,
-            "pace_min_mi": 0.0, "notes": "", "previous_category": None
+            "pace_min_mi": 0.0, "notes": "", "previous_category": None, "goal_id": None
         }]
     exercises = st.session_state.exercises
 
@@ -27,9 +27,19 @@ def main():
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT exercise FROM workout_exercises WHERE exercise IS NOT NULL")
         past_exercises = [row[0] for row in cur.fetchall() if row[0]]
+        
+        # Fetch active goals for linking
+        cur.execute("""
+            SELECT id, exercise, metric_type, target_value, target_date 
+            FROM goals 
+            WHERE user_id = %s AND target_date >= %s
+            ORDER BY target_date
+        """, (st.session_state.user_id, date.today()))
+        active_goals = cur.fetchall()
         conn.close()
     except:
         past_exercises = []
+        active_goals = []
 
     for i, ex in enumerate(exercises):
         with st.container(border=True):
@@ -111,12 +121,29 @@ def main():
                     full_exercise = f"{ex['category']} - {ex['sub_category']}: {final_name}".strip(": ") if ex["category"] and ex["sub_category"] else final_name
                     ex["exercise"] = full_exercise
                     ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=f"notes_{i}")
+                    
+                    # GOAL LINKING - Show relevant goals
+                    if active_goals:
+                        cardio_goals = [g for g in active_goals if 'cardio' in g[1].lower() or 'run' in g[1].lower() or 'walk' in g[1].lower()]
+                        if cardio_goals:
+                            goal_options = ["None - Not tracking a goal"] + [f"{g[1]} (Target: {g[3]} {g[2].replace('_', ' ')} by {g[4]})" for g in cardio_goals]
+                            selected_goal_idx = st.selectbox(
+                                "🎯 Link to Goal (Optional)",
+                                range(len(goal_options)),
+                                format_func=lambda idx: goal_options[idx],
+                                key=f"goal_link_{i}",
+                                help="Select a goal to track progress for this exercise"
+                            )
+                            if selected_goal_idx > 0:
+                                ex["goal_id"] = cardio_goals[selected_goal_idx - 1][0]
+                            else:
+                                ex["goal_id"] = None
 
             elif ex["category"] == "Weights":
                 ex["sets"] = st.number_input("Sets", min_value=1, value=ex["sets"], key=f"sets_{i}")
                 ex["reps"] = st.number_input("Reps", min_value=1, value=ex["reps"], key=f"reps_{i}")
                 ex["weight_lbs"] = st.number_input("Weight (lbs)", min_value=0.0, value=ex["weight_lbs"], key=f"weight_{i}", step=5.0)
-                ex["rest_min"] = st.number_input("Rest Between Sets (min)", min_value=0.0, value=ex["rest_min"], key=f"rest_{i}", step=0.5)
+                ex["rest_min"] = st.number_input("Rest Between Sets (min)", min_value=0.0, value=ex["rest_min"], step=0.5, key=f"rest_{i}")
                 ex["time_min"] = ex["distance_mi"] = 0.0
                 ex["time_sec"] = 0
 
@@ -131,6 +158,23 @@ def main():
                     full_exercise = f"{ex['category']} - {ex['sub_category']}: {final_name}".strip(": ") if ex["category"] and ex["sub_category"] else final_name
                     ex["exercise"] = full_exercise
                     ex["notes"] = st.text_area("Notes (AI Amplification)", value=ex["notes"], key=f"notes_{i}")
+                    
+                    # GOAL LINKING - Show relevant goals
+                    if active_goals:
+                        weight_goals = [g for g in active_goals if 'weight' in g[1].lower() or final_name.lower() in g[1].lower()]
+                        if weight_goals:
+                            goal_options = ["None - Not tracking a goal"] + [f"{g[1]} (Target: {g[3]} {g[2].replace('_', ' ')} by {g[4]})" for g in weight_goals]
+                            selected_goal_idx = st.selectbox(
+                                "🎯 Link to Goal (Optional)",
+                                range(len(goal_options)),
+                                format_func=lambda idx: goal_options[idx],
+                                key=f"goal_link_{i}",
+                                help="Select a goal to track progress for this exercise"
+                            )
+                            if selected_goal_idx > 0:
+                                ex["goal_id"] = weight_goals[selected_goal_idx - 1][0]
+                            else:
+                                ex["goal_id"] = None
 
             elif ex["category"] == "Free-Text":
                 ex["exercise"] = st.text_area("Describe Your Exercise", value=ex["exercise"], key=f"free_desc_{i}")
@@ -148,10 +192,11 @@ def main():
                 ex["sets"] = ex["reps"] = 1
                 ex["weight_lbs"] = ex["distance_mi"] = ex["rest_min"] = 0.0
                 ex["notes"] = ""
+                ex["goal_id"] = None
 
             else:
                 st.info("Select a category to begin.")
-                ex.update({"sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0, "pace_min_mi": 0.0, "exercise": "", "notes": ""})
+                ex.update({"sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0, "pace_min_mi": 0.0, "exercise": "", "notes": "", "goal_id": None})
 
             st.divider()
 
@@ -162,7 +207,7 @@ def main():
             exercises.append({
                 "category": None, "sub_category": None, "exercise": "", "sets": 1, "reps": 1,
                 "weight_lbs": 0.0, "time_min": 0.0, "time_sec": 0, "rest_min": 1.5, "distance_mi": 0.0,
-                "pace_min_mi": 0.0, "notes": "", "previous_category": None
+                "pace_min_mi": 0.0, "notes": "", "previous_category": None, "goal_id": None
             })
             st.rerun()
     with col_remove:
@@ -172,7 +217,7 @@ def main():
 
     # Save Form
     with st.form("save_form"):
-        st.info("Save partial or full session anytime.")
+        st.info("Save partial or full session anytime. Exercises linked to goals will automatically track your progress!")
         submitted = st.form_submit_button("Save Workout Session", type="primary")
         if submitted:
             if not any(ex["exercise"].strip() and ex["category"] for ex in exercises):
@@ -189,11 +234,11 @@ def main():
                     for ex in exercises:
                         if ex["exercise"].strip() and ex["category"]:
                             cur.execute(
-                                "INSERT INTO workout_exercises (workout_id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                                (workout_id, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"])
+                                "INSERT INTO workout_exercises (workout_id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes, goal_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                                (workout_id, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"], ex.get("goal_id"))
                             )
                     conn.commit()
-                    st.success("Workout saved! View it on the Dashboard.")
+                    st.success("Workout saved! Your goal progress has been updated.")
                     st.session_state.exercises = []
                     st.rerun()
                 except Exception as e:
