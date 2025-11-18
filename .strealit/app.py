@@ -3,12 +3,12 @@ import streamlit as st
 import psycopg2
 from sqlalchemy import create_engine
 
-# ——— DATABASE ENGINE ———
+# ─── DATABASE ENGINE ───
 engine = create_engine(st.secrets["POSTGRES_URL"])
 def get_conn():
     return psycopg2.connect(st.secrets["POSTGRES_URL"])
 
-# ——— INITIALIZE DATABASE ———
+# ─── INITIALIZE DATABASE ───
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -26,7 +26,7 @@ def init_db():
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             exercise TEXT NOT NULL,
-            metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min','reps','weight_lbs','distance_mi')),
+            metric_type TEXT NOT NULL CHECK (metric_type IN ('time_min','reps','weight_lbs','distance_mi','sets')),
             target_value NUMERIC NOT NULL,
             target_date DATE NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
@@ -50,13 +50,15 @@ def init_db():
             weight_lbs NUMERIC,
             time_min NUMERIC,
             rest_min NUMERIC,
-            distance_mi NUMERIC
+            distance_mi NUMERIC,
+            notes TEXT,
+            goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL
         );
 
-        -- Add notes to workout_exercises if missing
+        -- Add goal_id column if it doesn't exist
         DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='workout_exercises' AND column_name='notes') THEN
-                ALTER TABLE workout_exercises ADD COLUMN notes TEXT;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='workout_exercises' AND column_name='goal_id') THEN
+                ALTER TABLE workout_exercises ADD COLUMN goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL;
             END IF;
         END $$;
         """
@@ -78,7 +80,7 @@ def init_db():
 if 'db_initialized' not in st.session_state:
     init_db()
 
-# ——— AUTHENTICATION LOGIC ———
+# ─── AUTHENTICATION LOGIC ───
 
 def check_password(username, password):
     conn = get_conn()
@@ -119,30 +121,30 @@ def render_sidebar():
         st.markdown("### Navigation")
         
         # This is the ONLY set of navigation buttons.
-        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", width='stretch'):
+        if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
             st.session_state.current_page = "dashboard"
             st.rerun()
-        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", width='stretch'):
+        if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", use_container_width=True):
             st.session_state.current_page = "log_workout"
             st.rerun()
-        if st.sidebar.button("🎯 Goals", key="nav_goals", width='stretch'):
+        if st.sidebar.button("🎯 Goals", key="nav_goals", use_container_width=True):
             st.session_state.current_page = "goals"
             st.rerun()
-        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", width='stretch'):
+        if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", use_container_width=True):
             st.session_state.current_page = "ai_coach"
             st.rerun()
 
         if st.session_state.role == 'admin':
             st.markdown("### Admin")
-            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", width='stretch'):
+            if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", use_container_width=True):
                 st.session_state.current_page = "admin"
                 st.rerun()
 
         st.markdown("---")
-        if st.button("Logout", key="logout_button", width='stretch'):
+        if st.button("Logout", key="logout_button", use_container_width=True):
             logout()
 
-# ——— MAIN APP FLOW ———
+# ─── MAIN APP FLOW ───
 
 st.set_page_config(
     page_title="RISE Fitness Tracker",
