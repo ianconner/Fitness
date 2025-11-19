@@ -257,23 +257,33 @@ def main():
 
                 conn_e = get_conn()
                 cur_e = conn_e.cursor()
-                cur_e.execute("SELECT id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes FROM workout_exercises WHERE workout_id=%s", (wid,))
+                cur_e.execute("SELECT id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes, goal_id FROM workout_exercises WHERE workout_id=%s", (wid,))
                 rows = cur_e.fetchall()
+                
+                # Fetch active goals for linking
+                cur_e.execute("""
+                    SELECT id, exercise, metric_type, target_value, target_date 
+                    FROM goals 
+                    WHERE user_id = %s AND target_date >= %s
+                    ORDER BY target_date
+                """, (st.session_state.user_id, date.today()))
+                active_goals = cur_e.fetchall()
+                
                 ex_list = []
                 for r in rows:
-                    eid, name, sets, reps, wt, tm, rst, dist, nts = r
+                    eid, name, sets, reps, wt, tm, rst, dist, nts, gid = r
                     cat, sub, base = parse_exercise_name(name)
                     ex_list.append({ 
                         "id": eid, "category": cat, "sub_category": sub, "base_name": base,
                         "sets": int(sets or 1), "reps": int(reps or 1), "weight_lbs": float(wt or 0),
                         "time_min": float(tm or 0), "rest_min": float(rst or 0), "distance_mi": float(dist or 0),
-                        "notes": nts or "", "prev_cat": cat 
+                        "notes": nts or "", "prev_cat": cat, "goal_id": gid
                     })
                 if not ex_list:
                     ex_list = [{
                         "id": None, "category": None, "sub_category": None, "base_name": "", 
                         "sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, 
-                        "rest_min": 1.5, "distance_mi": 0.0, "notes": "", "prev_cat": None
+                        "rest_min": 1.5, "distance_mi": 0.0, "notes": "", "prev_cat": None, "goal_id": None
                     }]
 
                 for i, ex in enumerate(ex_list):
