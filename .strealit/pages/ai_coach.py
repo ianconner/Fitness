@@ -16,7 +16,7 @@ def get_user_data():
     """Fetches the user's latest 20 workouts and active goals."""
     try:
         # Fetch latest 20 workouts
-        # We explicitly fetch reps and rest_min to calculate true total time
+        # Explicitly fetching columns needed for the math fix (reps, time_min, rest_min)
         workouts = pd.read_sql("""
             SELECT w.workout_date, w.duration_min, w.notes,
                    we.exercise, we.sets, we.reps, we.weight_lbs, 
@@ -54,9 +54,10 @@ def generate_data_context(workouts, goals):
         for col in numeric_cols:
             workouts[col] = pd.to_numeric(workouts[col], errors='coerce')
         
-        # Handle NaNs for calculation safety
+        # Fill NaNs for calculation safety
         workouts['reps'] = workouts['reps'].fillna(1).clip(lower=1)
         workouts['rest_min'] = workouts['rest_min'].fillna(0)
+        workouts['time_min'] = workouts['time_min'].fillna(0)
 
         total_sessions = len(workouts['workout_date'].unique())
         last_workout_date = workouts['workout_date'].max()
@@ -64,31 +65,27 @@ def generate_data_context(workouts, goals):
 
         insight += f"• TOTAL SESSIONS: {total_sessions} logged. Days Since Last Session: {days_since_workout}.\n"
 
-        # Cardio analysis with CORRECTED time/pace logic
+        # Cardio analysis with CORRECTED Math Logic
         cardio = workouts[workouts['exercise'].astype(str).str.contains('Run|Walk|Cardio|Elliptical|Bike|Cycling', case=False, na=False)]
         if not cardio.empty and cardio['distance_mi'].notna().any():
             
-            # --- FIX START: Calculate Totals Correctly ---
-            # The DB stores 'time_min' as the time PER REP.
-            # Total Active Run Time = Time Per Rep * Reps
+            # 1. Active Moving Time = Time Per Rep * Reps
             cardio['total_active_time'] = cardio['time_min'] * cardio['reps']
             
-            # Total Session Duration (Fencepost: Rest is between intervals)
-            # Formula: (Time * Reps) + (Rest * (Reps - 1))
+            # 2. Total Session Duration = (Active Time) + (Rest * (Reps - 1))
+            # Fencepost logic: 3 reps have 2 rest periods.
             cardio['total_elapsed_time'] = cardio['total_active_time'] + (cardio['rest_min'] * (cardio['reps'] - 1).clip(lower=0))
             
-            # Pace Calculation: Strictly based on ACTIVE running time to determine speed
-            # (e.g., 15 mins running / 1.67 miles = ~9 min/mile)
+            # 3. Pace Calculation = Active Time / Distance
+            # We use active time because rest time shouldn't drag down the "running speed" metric
             cardio['avg_moving_pace'] = cardio['total_active_time'] / cardio['distance_mi']
-            # --- FIX END ---
-
+            
             recent_cardio = cardio.head(3)
             insight += f"\n• RECENT CARDIO PERFORMANCE:\n"
             for _, run in recent_cardio.iterrows():
                 if not pd.isna(run['distance_mi']) and run['distance_mi'] > 0:
-                    # Format string to be crystal clear to the AI
+                    # Format string to be crystal clear to the AI so it doesn't hallucinate
                     reps_str = f" ({int(run['reps'])} x {run['time_min']:.1f}m intervals)" if run['reps'] > 1 else ""
-                    
                     pace_str = f"{run['avg_moving_pace']:.2f} min/mi moving pace" if not pd.isna(run['avg_moving_pace']) else "N/A pace"
                     
                     insight += (f"  → {run['workout_date']}: {run['distance_mi']:.2f} mi total.\n"
@@ -96,7 +93,7 @@ def generate_data_context(workouts, goals):
                                 f"    Total Duration (w/ rest): {run['total_elapsed_time']:.1f} min.\n"
                                 f"    Calculated Speed: {pace_str}.\n")
 
-        # Lifting analysis
+        # Lifting analysis (Standard logic)
         lifting = workouts[workouts['exercise'].astype(str).str.contains('Squat|Deadlift|Bench|Press|Curl|Row', case=False, na=False)]
         if not lifting.empty:
             recent_lift = lifting.head(1).iloc[0]
@@ -104,38 +101,43 @@ def generate_data_context(workouts, goals):
                 insight += f"\n• RECENT STRENGTH WORK: {recent_lift['exercise']} @ {recent_lift['weight_lbs']:.0f} lbs x {recent_lift['sets']:.0f}x{recent_lift['reps']:.0f}\n"
 
     if not goals.empty:
-        insight += f"\n\nACTIVE GOALS:\n"
+        insight += f"\n\nACTIVE GOALS (PRIMARY FOCUS - Use pace as the key metric for cardio goals):\n"
         for _, g in goals.iterrows():
             target_date = pd.to_datetime(g['target_date']).date()
             days_left = (target_date - datetime.now().date()).days
             status = "ON TRACK" if days_left > 7 else "URGENT" if days_left >= 0 else "OVERDUE"
             
-            # Simple goal output - let the AI interpret the nuanced cardio data provided above
-            insight += f"  → GOAL: {g['exercise']} | Target: {g['target_value']} {g['metric_type']} by {target_date} ({status})\n"
-            
+            # Provide the goal details
+            insight += f"  → {g['exercise']} to hit {g['target_value']} {g['metric_type'].replace('_', ' ')} by {target_date} [{status}]\n"
+
+            # Add specific context if it's a pace goal (simplified for AI consumption)
+            if g['metric_type'] == 'time_min' and 'mile' in g['exercise'].lower():
+                 insight += "    (NOTE to AI: Check the 'Calculated Speed' above to see if they are meeting the pace requirement for this distance.)\n"
     else:
-        # Handle No Goals Scenario
+        # NEW BLOCK: Handle No Goals
         insight += "\n\nNO ACTIVE GOALS DETECTED:\n"
         insight += "• The athlete has not set any specific targets yet.\n"
-        insight += "• STRATEGY: Analyze the 'RAW WORKOUT DATA' to identify potential strengths.\n"
-        insight += "• ACTION REQUIRED: Suggest 1-2 specific, realistic goals based on their recent performance history (e.g., 'I see you ran 2 miles; let's aim for 3 miles next month'). Focus on consistency and optimization.\n"
+        insight += "• STRATEGY: Analyze the 'RAW WORKOUT DATA' below to identify potential strengths.\n"
+        insight += "• ACTION REQUIRED: Suggest 1-2 specific, realistic goals based on their recent performance history (e.g., 'I see you ran 2 miles; let's aim for 3 miles next month').\n"
 
+    # Include raw workout data
+    insight += "\n\nRAW WORKOUT DATA (Last 20 sessions):\n" + workouts.to_string()
     return insight
 
 def get_system_prompt(data_context, name):
     """Generate the system prompt for RISE."""
     return f"""You are RISE, a highly professional, data-driven performance coach for elite athletes. Your athlete's name is {name}. We are a team focused on optimization.
 
-**YOUR CONVERSATIONAL PROTOCOL:**
-1. **Analysis:** Look at the 'Calculated Speed' and 'Structure' in the provided data. 
-   - Note: If the athlete does intervals (e.g., 3 x 5min), the 'distance' applies to the TOTAL session. Do NOT divide single rep time by total distance. Use the 'Calculated Speed' provided.
+**YOUR CONVERSATIONAL PROTOCOL (Crucial):**
+1. **Conversational Flow:** You must deliver your advice in a **seamless, conversational flow**. Do NOT use a rigid, multi-section format (like "Section 1: Review, Section 2: Plan"). Speak to the athlete like a human coach standing next to them.
 2. **Scenario Handling:**
-   - **IF GOALS EXIST:** Analyze progress against those specific metrics.
-   - **IF NO GOALS EXIST:** Analyze workout trends (consistency, volume) and **suggest** a specific, realistic goal.
-3. **Tone:** Professional, direct, knowledgeable, slightly humorous. Do not be demanding.
-4. **Terminology:** Use terms like: **load management**, **work capacity**, **running economy**, **splits**, **volume**.
+   - **IF GOALS EXIST:** deeply analyze progress against those specific metrics.
+   - **IF NO GOALS EXIST:** Do NOT scold them. Instead, naturally suggest a realistic target based on their recent data (e.g., "Since you're hitting 9 min miles, let's try to get that down to 8:45").
+3. **Tone:** Highly professional, direct, knowledgeable, focused on data, strategy, and optimization, with a light touch of humor. You are supportive and collaborative—a true partner. **Crucially: Do not be demanding, bossy, or rude.**
+4. **Terminology:** Use elite fitness terms: **athlete**, **load management**, **metrics**, **optimization**, **protocol**, **rate of perceived exertion (RPE)**, and **training cycle**.
+5. **Data Integrity:** Look at the 'Calculated Speed' in the data context. Trust this calculation. If the user ran 3 intervals of 5 minutes, do NOT simply divide 5 minutes by the total distance. Use the calculated moving pace provided.
 
-**CURRENT ATHLETE DATA (Use this for your analysis):**
+**CURRENT ATHLETE DATA (Provided for your analysis. Do NOT show the user this raw block):**
 {data_context}
 """
 
