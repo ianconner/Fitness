@@ -44,19 +44,18 @@ def extract_pace_goal(goal_text):
     """Extract distance and time from goal text"""
     text = goal_text.lower()
     dist_match = re.search(r'(\d*\.?\d+)\s*(mile|mi)', text)
-    # Match both MM:SS and plain minutes format
-    time_match = re.search(r'(\d+):(\d+)', text)  # MM:SS format
+    time_match = re.search(r'(\d+):(\d+)', text)
     if not time_match:
-        time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)  # Plain minutes
+        time_match = re.search(r'(\d+)\s*(min|minute|mins)', text)
     
     distance = float(dist_match.group(1)) if dist_match else None
     
     if time_match:
-        if ':' in time_match.group(0):  # MM:SS format
+        if ':' in time_match.group(0):
             minutes = int(time_match.group(1))
             seconds = int(time_match.group(2))
             total_time = minutes + (seconds / 60)
-        else:  # Plain minutes
+        else:
             total_time = float(time_match.group(1))
     else:
         total_time = None
@@ -96,15 +95,7 @@ def main():
             def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
             df_workouts['type'] = df_workouts['exercise'].apply(classify)
 
-        # Goals
-        cur.execute("""
-            SELECT exercise, metric_type, target_value, target_date
-            FROM goals
-            WHERE user_id = %s AND target_date >= %s
-            ORDER BY target_date
-        """, (st.session_state.user_id, date.today()))
-        goals_rows = cur.fetchall()
-        df_goals = pd.DataFrame(goals_rows, columns=['exercise', 'metric_type', 'target_value', 'target_date'])
+        # Goals - not needed here anymore, will fetch separately
 
         # Past exercises for autocomplete
         cur.execute("""
@@ -322,27 +313,77 @@ def main():
                             st.caption(f"**Pace: {pace:.2f} min/mi**" if ex["distance_mi"] > 0 else "**Pace: -**")
                             ex["sets"] = 1
                             ex["weight_lbs"] = 0.0
+                            
+                            # Compact single-line for name and goal
+                            col_name, col_goal = st.columns([2, 1])
+                            with col_name:
+                                sel_name = st.selectbox("Exercise", options=[""] + past_exercises,
+                                    index=0 if not ex.get("base_name") else (past_exercises.index(ex["base_name"])+1 if ex["base_name"] in past_exercises else 0),
+                                    key=f"ename_{i}")
+                                final_name = sel_name if sel_name else ex["base_name"]
+                            with col_goal:
+                                # GOAL LINKING for Cardio
+                                if active_goals:
+                                    relevant_goals = [g for g in active_goals if 'cardio' in g[1].lower() or 'run' in g[1].lower() or 'walk' in g[1].lower()]
+                                    if relevant_goals:
+                                        goal_options = ["No Goal"] + [f"{g[1].split(':')[-1].strip()}" for g in relevant_goals]
+                                        current_goal_idx = 0
+                                        if ex.get("goal_id"):
+                                            for idx, g in enumerate(relevant_goals):
+                                                if g[0] == ex["goal_id"]:
+                                                    current_goal_idx = idx + 1
+                                                    break
+                                        selected_goal_idx = st.selectbox("🎯 Goal", range(len(goal_options)),
+                                            format_func=lambda idx: goal_options[idx], index=current_goal_idx, key=f"egoal_{i}")
+                                        ex["goal_id"] = relevant_goals[selected_goal_idx - 1][0] if selected_goal_idx > 0 else None
+                            
+                            full_ex = f"{ex['category']} - {ex['sub_category']}: {final_name}".strip(": ") if ex['category'] and ex['sub_category'] else final_name
+                            ex["base_name"] = final_name
+                            ex["exercise"] = full_ex
+                            ex["notes"] = st.text_input("Notes", value=ex.get("notes", ""), key=f"enotes_{i}")
+                            
                         elif ex["category"] == "Weights":
                             ex["sets"] = st.number_input("Sets", min_value=1, value=ex["sets"], key=f"esets_{i}")
                             ex["reps"] = st.number_input("Reps", min_value=1, value=ex["reps"], key=f"ereps_{i}")
                             ex["weight_lbs"] = st.number_input("Weight", min_value=0.0, value=ex["weight_lbs"], step=5.0, key=f"ewt_{i}")
                             ex["rest_min"] = st.number_input("Rest", min_value=0.0, value=ex["rest_min"], step=0.5, key=f"erest_{i}")
                             ex["time_min"] = ex["distance_mi"] = 0.0
+                            
+                            # Compact single-line for name and goal
+                            col_name, col_goal = st.columns([2, 1])
+                            with col_name:
+                                sel_name = st.selectbox("Exercise", options=[""] + past_exercises,
+                                    index=0 if not ex.get("base_name") else (past_exercises.index(ex["base_name"])+1 if ex["base_name"] in past_exercises else 0),
+                                    key=f"ename_{i}")
+                                final_name = sel_name if sel_name else ex["base_name"]
+                            with col_goal:
+                                # GOAL LINKING for Weights
+                                if active_goals:
+                                    relevant_goals = [g for g in active_goals if 'weight' in g[1].lower() or final_name.lower() in g[1].lower()]
+                                    if relevant_goals:
+                                        goal_options = ["No Goal"] + [f"{g[1].split(':')[-1].strip()}" for g in relevant_goals]
+                                        current_goal_idx = 0
+                                        if ex.get("goal_id"):
+                                            for idx, g in enumerate(relevant_goals):
+                                                if g[0] == ex["goal_id"]:
+                                                    current_goal_idx = idx + 1
+                                                    break
+                                        selected_goal_idx = st.selectbox("🎯 Goal", range(len(goal_options)),
+                                            format_func=lambda idx: goal_options[idx], index=current_goal_idx, key=f"egoal_{i}")
+                                        ex["goal_id"] = relevant_goals[selected_goal_idx - 1][0] if selected_goal_idx > 0 else None
+                            
+                            full_ex = f"{ex['category']} - {ex['sub_category']}: {final_name}".strip(": ") if ex['category'] and ex['sub_category'] else final_name
+                            ex["base_name"] = final_name
+                            ex["exercise"] = full_ex
+                            ex["notes"] = st.text_input("Notes", value=ex.get("notes", ""), key=f"enotes_{i}")
+                            
                         elif ex["category"] == "Free-Text":
                             ex["base_name"] = st.text_area("Description", value=ex["base_name"], key=f"efree_{i}")
                             ex["time_min"] = st.number_input("Time", min_value=0.0, value=ex["time_min"], step=0.5, key=f"efreet_{i}")
                             ex["sets"]=ex["reps"]=1
                             ex["weight_lbs"]=ex["distance_mi"]=ex["rest_min"]=0.0
-
-                        with st.expander("Details", expanded=True):
-                            sel_name = st.selectbox("Name", options=[""] + past_exercises,
-                                index=0 if not ex.get("base_name") else (past_exercises.index(ex["base_name"])+1 if ex["base_name"] in past_exercises else 0),
-                                key=f"ename_{i}")
-                            final_name = st.text_input("or type", value=sel_name or ex["base_name"], key=f"ename_txt_{i}")
-                            full_ex = f"{ex['category']} - {ex['sub_category']}: {final_name}".strip(": ") if ex['category'] and ex['sub_category'] else final_name
-                            ex["base_name"] = final_name
-                            ex["exercise"] = full_ex
-                            ex["notes"] = st.text_area("Notes", value=ex["notes"], key=f"enotes_{i}")
+                            ex["exercise"] = ex["base_name"]
+                            ex["goal_id"] = None
 
                         st.divider()
 
@@ -352,7 +393,7 @@ def main():
                         ex_list.append({
                             "id": None, "category": None, "sub_category": None, "base_name": "", 
                             "sets": 1, "reps": 1, "weight_lbs": 0.0, "time_min": 0.0, 
-                            "rest_min": 1.5, "distance_mi": 0.0, "notes": "", "prev_cat": None
+                            "rest_min": 1.5, "distance_mi": 0.0, "notes": "", "prev_cat": None, "goal_id": None
                         })
                         st.rerun()
                 with a2:
@@ -362,7 +403,7 @@ def main():
 
                 s1, s2 = st.columns(2)
                 with s1:
-                    if st.button("💾 Save Changes", type="primary", width='stretch'):
+                    if st.button("💾 Save Changes", type="primary", use_container_width=True):
                         try:
                             cu = conn_e.cursor()
                             cu.execute("UPDATE workouts SET workout_date=%s, notes=%s, duration_min=%s WHERE id=%s AND user_id=%s",
@@ -370,8 +411,8 @@ def main():
                             cu.execute("DELETE FROM workout_exercises WHERE workout_id=%s", (wid,))
                             for ex in ex_list:
                                 if ex["exercise"].strip() and ex["category"]:
-                                    cu.execute("INSERT INTO workout_exercises (workout_id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                                        (wid, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"]))
+                                    cu.execute("INSERT INTO workout_exercises (workout_id, exercise, sets, reps, weight_lbs, time_min, rest_min, distance_mi, notes, goal_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                                        (wid, ex["exercise"], ex["sets"], ex["reps"], ex["weight_lbs"], ex["time_min"], ex["rest_min"], ex["distance_mi"], ex["notes"], ex.get("goal_id")))
                             conn_e.commit()
                             st.success("Updated!")
                             st.session_state.editing_workout_id = None
@@ -383,7 +424,7 @@ def main():
                             cur_e.close()
                             conn_e.close()
                 with s2:
-                    if st.button("❌ Cancel", width='stretch'):
+                    if st.button("❌ Cancel", use_container_width=True):
                         st.session_state.editing_workout_id = None
                         st.rerun()
 
