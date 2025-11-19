@@ -161,21 +161,67 @@ def main():
             st.session_state.confirm_delete_id = None
 
         for idx, sess in sessions.iterrows():
+            # Get exercises for this workout
+            ex = df_workouts[df_workouts['workout_id'] == sess['workout_id']]
+            cardio = ex[ex['type'] == 'Cardio']
+            weight = ex[ex['type'] == 'Weight']
+            
+            # Build condensed summary
+            summary_parts = []
+            
+            # Cardio summary
+            if not cardio.empty:
+                cardio_items = []
+                for _, row in cardio.iterrows():
+                    ex_name = row['exercise'].split(': ')[-1] if ': ' in row['exercise'] else row['exercise']
+                    parts = []
+                    if not pd.isna(row['distance_mi']) and row['distance_mi'] > 0:
+                        parts.append(f"{row['distance_mi']:.1f}mi")
+                    if not pd.isna(row['time_min']) and row['time_min'] > 0:
+                        parts.append(format_time_mmss(row['time_min']))
+                    cardio_items.append(f"{ex_name} ({', '.join(parts)})" if parts else ex_name)
+                if cardio_items:
+                    summary_parts.append(f"🏃 {' • '.join(cardio_items)}")
+            
+            # Weights summary
+            if not weight.empty:
+                weight_items = []
+                for _, row in weight.iterrows():
+                    ex_name = row['exercise'].split(': ')[-1] if ': ' in row['exercise'] else row['exercise']
+                    parts = []
+                    if not pd.isna(row['sets']) and not pd.isna(row['reps']):
+                        parts.append(f"{int(row['sets'])}×{int(row['reps'])}")
+                    if not pd.isna(row['weight_lbs']) and row['weight_lbs'] > 0:
+                        parts.append(f"{row['weight_lbs']:.0f}lbs")
+                    weight_items.append(f"{ex_name} ({', '.join(parts)})" if parts else ex_name)
+                if weight_items:
+                    summary_parts.append(f"💪 {' • '.join(weight_items)}")
+            
             with st.container(border=True):
-                # Header row with date and action buttons
-                header_col1, header_col2 = st.columns([3, 1])
-                with header_col1:
-                    st.markdown(f"### 🗓️ {sess['workout_date'].strftime('%A, %B %d, %Y')}")
-                with header_col2:
+                # Single line layout: Date | Summary | Duration | Actions
+                col1, col2, col3, col4 = st.columns([2, 5, 1, 1])
+                
+                with col1:
+                    st.markdown(f"**{sess['workout_date'].strftime('%b %d')}**")
+                
+                with col2:
+                    if summary_parts:
+                        st.markdown(f"*{' | '.join(summary_parts)}*")
+                    else:
+                        st.markdown("*No exercises logged*")
+                
+                with col3:
+                    st.markdown(f"⏱️ {sess['duration_min']}m")
+                
+                with col4:
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
-                        if st.button("✏️", key=f"edit_{sess['workout_id']}", help="Edit workout", use_container_width=True):
+                        if st.button("✏️", key=f"edit_{sess['workout_id']}", help="Edit", use_container_width=True):
                             st.session_state.editing_workout_id = sess['workout_id']
                             st.rerun()
                     with btn_col2:
-                        # Two-step delete: first click shows confirmation, second click deletes
                         if st.session_state.confirm_delete_id == sess['workout_id']:
-                            if st.button("⚠️", key=f"confirm_{sess['workout_id']}", type="primary", help="Confirm delete", use_container_width=True):
+                            if st.button("⚠️", key=f"confirm_{sess['workout_id']}", type="primary", help="Confirm", use_container_width=True):
                                 cdel = get_conn()
                                 curdel = cdel.cursor()
                                 try:
@@ -191,57 +237,9 @@ def main():
                                     curdel.close()
                                     cdel.close()
                         else:
-                            if st.button("🗑️", key=f"del_{sess['workout_id']}", type="secondary", help="Delete workout", use_container_width=True):
+                            if st.button("🗑️", key=f"del_{sess['workout_id']}", type="secondary", help="Delete", use_container_width=True):
                                 st.session_state.confirm_delete_id = sess['workout_id']
                                 st.rerun()
-                
-                # Workout metadata
-                meta_col1, meta_col2 = st.columns([1, 3])
-                with meta_col1:
-                    st.metric("Duration", f"{sess['duration_min']} min", delta=None)
-                with meta_col2:
-                    if sess['notes']:
-                        st.markdown(f"**Notes:** *{sess['notes']}*")
-                
-                st.divider()
-                
-                # Exercise data
-                ex = df_workouts[df_workouts['workout_id'] == sess['workout_id']]
-                cardio = ex[ex['type'] == 'Cardio']
-                weight = ex[ex['type'] == 'Weight']
-                
-                if not cardio.empty:
-                    st.markdown("#### 🏃 Cardio")
-                    for _, row in cardio.iterrows():
-                        with st.container():
-                            ex_col1, ex_col2, ex_col3, ex_col4 = st.columns([3, 1, 1, 1])
-                            with ex_col1:
-                                st.markdown(f"**{row['exercise']}**")
-                            with ex_col2:
-                                if not pd.isna(row['time_min']) and row['time_min'] > 0:
-                                    st.caption(f"⏱️ {format_time_mmss(row['time_min'])}")
-                            with ex_col3:
-                                if not pd.isna(row['distance_mi']) and row['distance_mi'] > 0:
-                                    st.caption(f"📏 {row['distance_mi']:.2f} mi")
-                            with ex_col4:
-                                if not pd.isna(row['pace_min_mi']) and row['pace_min_mi'] > 0:
-                                    st.caption(f"⚡ {format_pace_mmss(row['pace_min_mi'])}/mi")
-                    st.markdown("")
-                
-                if not weight.empty:
-                    st.markdown("#### 💪 Weights")
-                    for _, row in weight.iterrows():
-                        with st.container():
-                            ex_col1, ex_col2, ex_col3 = st.columns([3, 1, 1])
-                            with ex_col1:
-                                st.markdown(f"**{row['exercise']}**")
-                            with ex_col2:
-                                sets_reps = f"{int(row['sets'])}×{int(row['reps'])}" if not pd.isna(row['sets']) and not pd.isna(row['reps']) else "-"
-                                st.caption(f"🔢 {sets_reps}")
-                            with ex_col3:
-                                if not pd.isna(row['weight_lbs']) and row['weight_lbs'] > 0:
-                                    st.caption(f"⚖️ {row['weight_lbs']:.0f} lbs")
-                    st.markdown("")
 
         # EDIT MODE - Place immediately after Recent Workouts
         if st.session_state.get("editing_workout_id"):
