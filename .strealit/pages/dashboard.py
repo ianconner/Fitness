@@ -95,8 +95,6 @@ def main():
             def classify(ex): return 'Cardio' if pd.notna(ex) and any(k in ex.lower() for k in cardio_keywords) else 'Weight'
             df_workouts['type'] = df_workouts['exercise'].apply(classify)
 
-        # Goals - not needed here anymore, will fetch separately
-
         # Past exercises for autocomplete
         cur.execute("""
             SELECT DISTINCT we.exercise
@@ -116,8 +114,15 @@ def main():
             df_workouts[col] = pd.to_numeric(df_workouts[col], errors='coerce')
         df_workouts['distance_mi_numeric'] = df_workouts['distance_mi'].replace(0, np.nan)
 
-        # PACE: ((time + rest) * reps) / distance
-        df_workouts['total_effort'] = (df_workouts['time_min'] + df_workouts['rest_min']) * df_workouts['reps']
+        # PACE: (time * reps) + (rest * (reps - 1)) / distance
+        # We handle missing rest by filling with 0
+        df_workouts['rest_min_filled'] = df_workouts['rest_min'].fillna(0)
+        df_workouts['reps_filled'] = df_workouts['reps'].fillna(1)
+        
+        # FIX: Correct total effort formula to only include rest BETWEEN sets/reps
+        df_workouts['total_effort'] = (df_workouts['time_min'] * df_workouts['reps_filled']) + \
+                                      (df_workouts['rest_min_filled'] * (df_workouts['reps_filled'] - 1).clip(lower=0))
+                                      
         df_workouts['pace_min_mi'] = df_workouts['total_effort'] / df_workouts['distance_mi_numeric']
 
         # Format for display - keep numeric for calculations, create formatted columns
@@ -169,7 +174,15 @@ def main():
                     if not pd.isna(row['distance_mi']) and row['distance_mi'] > 0:
                         parts.append(f"{row['distance_mi']:.1f}mi")
                     if not pd.isna(row['time_min']) and row['time_min'] > 0:
-                        parts.append(format_time_mmss(row['time_min']))
+                        # FIX: Apply correct total time formula for display: (Time * Reps) + (Rest * (Reps-1))
+                        reps_val = row['reps'] if row['reps'] > 0 else 1
+                        rest_val = row['rest_min'] if not pd.isna(row['rest_min']) else 0
+                        
+                        total_time = (row['time_min'] * reps_val) + (rest_val * max(0, reps_val - 1))
+                        parts.append(format_time_mmss(total_time))
+                        
+                        if reps_val > 1:
+                            parts.append(f"({int(reps_val)} intervals)")
                     cardio_items.append(f"{ex_name} ({', '.join(parts)})" if parts else ex_name)
                 if cardio_items:
                     summary_parts.append(f"🏃 {' • '.join(cardio_items)}")
