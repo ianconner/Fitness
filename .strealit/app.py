@@ -303,21 +303,26 @@ def render_sidebar():
         
         if st.sidebar.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
             st.session_state.current_page = "dashboard"
+            st.session_state.sidebar_state = "collapsed"
             st.rerun()
         if st.sidebar.button("🏋️ Log Workout", key="nav_log_workout", use_container_width=True):
             st.session_state.current_page = "log_workout"
+            st.session_state.sidebar_state = "collapsed"
             st.rerun()
         if st.sidebar.button("🎯 Goals", key="nav_goals", use_container_width=True):
             st.session_state.current_page = "goals"
+            st.session_state.sidebar_state = "collapsed"
             st.rerun()
         if st.sidebar.button("🤖 AI Coach (RISE)", key="nav_ai_coach", use_container_width=True):
             st.session_state.current_page = "ai_coach"
+            st.session_state.sidebar_state = "collapsed"
             st.rerun()
 
         if st.session_state.role == 'admin':
             st.markdown("### Admin")
             if st.sidebar.button("⚙️ Admin Panel", key="nav_admin", use_container_width=True):
                 st.session_state.current_page = "admin"
+                st.session_state.sidebar_state = "collapsed"
                 st.rerun()
 
         st.markdown("---")
@@ -325,11 +330,14 @@ def render_sidebar():
             logout()
 
 # ─── MAIN APP FLOW ───
+# Determine sidebar state
+sidebar_state = st.session_state.get('sidebar_state', 'expanded')
+
 st.set_page_config(
     page_title="RISE Fitness Tracker",
     page_icon="🏋️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state=sidebar_state
 )
 
 # Initialize theme before anything else
@@ -392,6 +400,8 @@ else:
     if st.session_state.get("just_logged_in"):
         del st.session_state["just_logged_in"]
         st.success("Logged in!")
+        # Reset sidebar state on login
+        st.session_state.sidebar_state = "expanded"
         st.rerun()
 
     # Set default page to dashboard and handle routing
